@@ -1,10 +1,10 @@
 milvus:
-  host: '127.0.0.1'
+  host: '121.37.253.139'
   port: '19530'
 
 mysql:
-  host: '127.0.0.1'
-  port: 8886
+  host: '121.37.253.139'
+  port: 3306
   user: 'root'
-  password: '123456'
-  database: 'test_db'
+  password: 'zy123456'
+  database: 'db'
