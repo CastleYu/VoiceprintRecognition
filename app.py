@@ -7,12 +7,24 @@ import numpy as np
 from werkzeug.utils import secure_filename
 from asr import SpeechRecognitionAdapter, PaddleSpeechRecognition
 from vector import SpeakerVerificationAdapter, PaddleSpeakerVerification
+from transformers import AutoTokenizer, AutoModel
+from sklearn.metrics.pairwise import cosine_similarity
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # 用于闪现消息
 
 DEFAULT_TABLE = "audio_table"
 table_name = 'audio'
+
+# 加载BERT模型和分词器
+tokenizer = AutoTokenizer.from_pretrained('./bert-base-chinese')
+model = AutoModel.from_pretrained('./bert-base-chinese')
+
+
+def get_embedding(text):
+    inputs = tokenizer(text, return_tensors='pt')
+    outputs = model(**inputs)
+    return outputs.last_hidden_state.mean(dim=1).detach().numpy()
 
 # 读取配置文件
 def load_config(config_path='config.yaml'):
@@ -27,7 +39,7 @@ UPLOAD_FOLDER = 'uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 accuracy_threshold = 0.8
-
+similarity_threshold = 0.8
 
 # Milvus数据库
 class MilvusClient:
@@ -94,6 +106,31 @@ class MySQLClient:
         insert_sql = f"INSERT INTO {table_name} (voiceprint) VALUES (%s)"
         self.cursor.executemany(insert_sql, data)
         self.connection.commit()
+    def create_action_table(self):
+        create_table_sql = f"""
+        CREATE TABLE IF NOT EXISTS action (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            action VARCHAR(255) UNIQUE
+        );
+        """
+        self.cursor.execute(create_table_sql)
+        self.connection.commit()
+
+    def insert_action(self, action):
+        insert_sql = f"INSERT INTO action (action) VALUES (%s)"
+        self.cursor.execute(insert_sql, (action,))
+        self.connection.commit()
+
+    def delete_action(self, action):
+        delete_sql = f"DELETE FROM action WHERE action = %s"
+        self.cursor.execute(delete_sql, (action,))
+        self.connection.commit()
+
+    def get_all_actions(self):
+        select_sql = "SELECT action FROM action"
+        self.cursor.execute(select_sql)
+        results = self.cursor.fetchall()
+        return [result[0] for result in results]
 
 
 milvus_client = MilvusClient(config['milvus']['host'], config['milvus']['port'])
@@ -206,3 +243,81 @@ def recognize():
     os.remove(file_path)
 
     return 'ASR Result: \n' + text
+
+@app.route('/add_action', methods=['POST'])
+def add_action():
+    # 检查请求中是否包含指令部分
+    if 'action' not in request.form:
+        flash('No action part')
+        return redirect(request.url)
+
+    action = request.form['action']
+
+    # 检查指令是否为空
+    if action == '':
+        flash('No action provided')
+        return redirect(request.url)
+
+    # 确保action表已经创建
+    mysql_client.create_action_table()
+
+    # 将指令插入到MySQL
+    mysql_client.insert_action(action)
+
+    return 'Action added successfully'
+
+@app.route('/delete_action', methods=['POST'])
+def delete_action():
+    # 检查请求中是否包含指令部分
+    if 'action' not in request.form:
+        flash('No action part')
+        return redirect(request.url)
+
+    action = request.form['action']
+
+    # 检查指令是否为空
+    if action == '':
+        flash('No action provided')
+        return redirect(request.url)
+
+    # 从MySQL中删除指令
+    mysql_client.delete_action(action)
+
+    return 'Action deleted successfully'
+
+def match_action(action):
+    # 获取所有指令
+    all_actions = mysql_client.get_all_actions()
+
+    # 计算相似度
+    keyword_emb = get_embedding(action)
+    similarities = [(action, cosine_similarity(keyword_emb, get_embedding(action))[0][0]) for action in all_actions]
+    # similarities = [(action, np.dot(keyword_emb, get_embedding(action).T)[0][0]) for action in all_actions]
+
+    # 按相似度排序
+    similarities.sort(key=lambda x: x[1], reverse=True)
+
+    if not similarities or similarities[0][1] < similarity_threshold:  # 添加阈值检查
+        return 'No matching actions found'
+    print(similarities[0][1])
+
+    # 返回最匹配的指令
+    best_match = similarities[0][0]
+    return best_match
+
+@app.route('/search_action', methods=['POST'])
+def search_action():
+    # 检查请求中是否包含指令部分
+    if 'action' not in request.form:
+        flash('No action part')
+        return redirect(request.url)
+
+    action = request.form['action']
+
+    # 检查关键词是否为空
+    if action == '':
+        flash('No action provided')
+        return redirect(request.url)
+
+    best_match = match_action(action)
+    return 'Best match action is: ' + best_match
