@@ -35,6 +35,15 @@ pip install LAC -i https://pypi.tuna.tsinghua.edu.cn/simple
 [//]: # (pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple)
 
 [//]: # (```)
+#### pytorch
+- Windows:
+```sh
+pip install torch torchvision torchaudio
+```
+- Linux:
+```sh
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+```
 
 ### 数据库配置（已部署服务器可忽略）
 
