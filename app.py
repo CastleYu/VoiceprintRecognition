@@ -1,21 +1,31 @@
 import os.path
+import sys
 
 import numpy as np
 import yaml
-from flask import Flask, request, redirect, flash
-from werkzeug.utils import secure_filename
+from flask import Flask, request, redirect, flash, jsonify
 
 from action.action_matcher import *
 from audio.asr import PaddleSpeechRecognition, SpeechRecognitionAdapter
 from audio.vector import PaddleSpeakerVerification, SpeakerVerificationAdapter
 from dao.milvus_dao import MilvusClient
 from dao.mysql_dao import MySQLClient
+from utils.file_utils import check_file_in_request, save_file
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # 用于闪现消息
 
+
+# 配置标准输出和标准错误的编码
+def set_console_encoding(encoding='utf-8'):
+    sys.stdout.reconfigure(encoding=encoding)
+    sys.stderr.reconfigure(encoding=encoding)
+
+
 DEFAULT_TABLE = "audio_table"
 table_name = 'audio'
+SUCCESS = 'Success'
+FAILED = 'Failed'
 
 
 # 读取配置文件
@@ -46,49 +56,22 @@ paddleVector = SpeakerVerificationAdapter(PaddleSpeakerVerification())
 action_set = mysql_client.get_all_actions()
 models_path = os.path.abspath(os.path.join('action', 'bert_models'))
 action_matcher = InstructionMatcher(models_path).load(MicomlMatcher('paraphrase-multilingual-MiniLM-L12-v2'))
+
+
 # action_matcher = InstructionMatcher(models_path).load(GoogleMatcher('google-bert-base-chinese'))
-
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
-def check_file_in_request():
-    # 检查请求中是否包含文件部分
-    if 'audio_file' not in request.files:
-        flash('No file part')
-        return False, None
-
-    file = request.files['audio_file']
-
-    # 检查文件是否被选择
-    if file.filename == '':
-        flash('No selected file')
-        return False, None
-
-    # 检查文件是否在允许的扩展名列表中
-    if not (file and allowed_file(file.filename)):
-        flash('File type not allowed')
-        return False, None
-
-    return True, file
 
 
 @app.route('/load', methods=['PUT'])
 def load():
-    is_valid, file = check_file_in_request()
+    is_valid, message, file = check_file_in_request(request)
     if not is_valid:
+        flash(message)
         return redirect(request.url)
 
-    filename = secure_filename(file.filename)
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    if not os.path.exists(app.config['UPLOAD_FOLDER']):
-        os.makedirs(app.config['UPLOAD_FOLDER'])
-    file.save(file_path)
+    file_path = save_file(file, app.config['UPLOAD_FOLDER'])
 
     audio_emb = paddleVector.get_embedding(file_path)
 
-    # 删除临时保存的文件
     os.remove(file_path)
 
     # 将特征向量插入 Milvus 并获取 ID
@@ -99,40 +82,49 @@ def load():
     mysql_client.create_mysql_table(table_name)
     mysql_client.load_data_to_mysql(table_name, milvus_ids)
 
-    return str(milvus_ids)
+    response = {
+        'result': SUCCESS,
+        'data': {
+            'user_id': 0,
+            'milvus_ids': milvus_ids,
+            'voiceprint': milvus_ids
+        }
+    }
+    return jsonify(response)
 
 
 @app.route('/asr', methods=['POST'])
 def asr():
-    is_valid, file = check_file_in_request()
+    is_valid, message, file = check_file_in_request(request)
     if not is_valid:
+        flash(message)
         return redirect(request.url)
 
-    filename = secure_filename(file.filename)
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    if not os.path.exists(app.config['UPLOAD_FOLDER']):
-        os.makedirs(app.config['UPLOAD_FOLDER'])
-    file.save(file_path)
+    file_path = save_file(file, app.config['UPLOAD_FOLDER'])
+    try:
+        text = paddleASR.recognize(file_path)
+    except Exception as e:
+        text = None
 
-    text = paddleASR.recognize(file_path)
-
-    # 删除临时保存的文件
     os.remove(file_path)
 
-    return 'ASR Result: \n' + text
+    response = {
+        'result': SUCCESS if text else FAILED,
+        'data': {
+            ''
+        }
+    }
+    return jsonify(response)
 
 
 @app.route('/recognize', methods=['POST'])
 def recognize():
-    is_valid, file = check_file_in_request()
+    is_valid, message, file = check_file_in_request(request)
     if not is_valid:
+        flash(message)
         return redirect(request.url)
 
-    filename = secure_filename(file.filename)
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    if not os.path.exists(app.config['UPLOAD_FOLDER']):
-        os.makedirs(app.config['UPLOAD_FOLDER'])
-    file.save(file_path)
+    file_path = save_file(file, app.config['UPLOAD_FOLDER'])
 
     audio_emb = paddleVector.get_embedding(file_path)
     results = milvus_client.search(audio_emb, table_name, 1)
@@ -141,15 +133,26 @@ def recognize():
     similar_vector = np.array(results[0][0].entity.vec, dtype=np.float32)
 
     similar = paddleVector.get_embeddings_score(similar_vector, audio_emb)
-    if similar < accuracy_threshold:
-        return "Illegal"
+    recognize_result = FAILED
+    if similar >= accuracy_threshold:
+        recognize_result = SUCCESS
+        text = paddleASR.recognize(file_path)
+    else:
+        text = ''
 
-    text = paddleASR.recognize(file_path)
-
-    # 删除临时保存的文件
     os.remove(file_path)
 
-    return 'ASR Result: \n' + text
+    response = {
+        'result': recognize_result,
+        'data': {
+            'user_id': user_id,
+            'similar_distance': similar_distance,
+            'similarity_score': similar,
+            'asr_result': text
+        }
+    }
+
+    return jsonify(response)
 
 
 @app.route('/add_action', methods=['POST'])
@@ -172,7 +175,7 @@ def add_action():
     # 将指令插入到MySQL
     mysql_client.insert_action(action)
 
-    return 'Action added successfully'
+    return jsonify({'result': SUCCESS})
 
 
 @app.route('/delete_action', methods=['POST'])
@@ -192,7 +195,7 @@ def delete_action():
     # 从MySQL中删除指令
     mysql_client.delete_action(action)
 
-    return 'Action deleted successfully'
+    return jsonify({'result': SUCCESS})
 
 
 @app.route('/search_action', methods=['GET'])
@@ -209,8 +212,17 @@ def search_action():
         flash('No action provided')
         return redirect(request.url)
 
-    best_match = action_matcher.match(action, action_set)
-    return 'Best match action is: ' + best_match
+    best_match, similarity_score = action_matcher.match(action, action_set)
+    action_id = mysql_client.get_action_id(best_match)
+    response = {
+        'result': SUCCESS,
+        'data': {
+            "action_id": action_id,
+            'best_match_action': best_match,
+            'similarity_percent': f'{similarity_score * 100:.1f}'
+        }
+    }
+    return jsonify(response)
 
 
 if __name__ == '__main__':

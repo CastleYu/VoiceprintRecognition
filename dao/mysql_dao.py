@@ -1,4 +1,5 @@
 import pymysql
+from pymysql.err import OperationalError
 
 
 # Mysql数据库
@@ -6,6 +7,25 @@ class MySQLClient:
     def __init__(self, host, port, user, password, database):
         self.connection = pymysql.connect(host=host, port=port, user=user, password=password, database=None)
         self.cursor = self.connection.cursor()
+        self.cursor = None
+        self.connection = None
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.database = database
+        self.connect()
+
+    def connect(self):
+        try:
+            self.connection = pymysql.connect(host=self.host, port=self.port, user=self.user, password=self.password,
+                                              database=None)
+            self.cursor = self.connection.cursor()
+            self.cursor.execute(f"CREATE DATABASE IF NOT EXISTS {self.database}")
+            self.connection.select_db(self.database)
+        except OperationalError as e:
+            print(f"Error connecting to MySQL: {e}")
+            raise
 
         self.cursor.execute(f"CREATE DATABASE IF NOT EXISTS {database}")
         self.connection.select_db(database)
@@ -50,3 +70,10 @@ class MySQLClient:
         self.cursor.execute(select_sql)
         results = self.cursor.fetchall()
         return [result[0] for result in results]
+
+    def get_action_id(self, action):
+        select_sql = f"SELECT id FROM action WHERE action = %s"
+        self.cursor.execute(select_sql, (action,))
+        result = self.cursor.fetchone()
+        ans = result[0] or None
+        return ans

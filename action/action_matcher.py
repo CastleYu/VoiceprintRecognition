@@ -48,9 +48,9 @@ class MicomlMatcher:
 
         print(similarity_scores)
         if similarity_scores[0][1] > threshold:
-            return similarity_scores[0][0]
+            return similarity_scores[0][0], similarity_scores[0][1]
         else:
-            return 'No matching actions found'
+            return 'No matching actions found', '0'
 
     def do_cut(self, input_instruction):
         i_list = self._lac.segment(input_instruction)
@@ -81,11 +81,10 @@ class GoogleMatcher:
         print(similarities)
         # 阈值检查
         if not similarities or similarities[0][1] < threshold:
-            return 'No matching actions found'
+            return 'No matching actions found', '0'
 
         # 返回最匹配的指令
-        best_match = similarities[0][0]
-        return best_match
+        return similarities[0][0], similarities[0][1]
 
     def get_embedding(self, text):
         inputs = self._tokenizer(text, return_tensors='pt')
