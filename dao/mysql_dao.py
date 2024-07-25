@@ -5,8 +5,6 @@ from pymysql.err import OperationalError
 # Mysql数据库
 class MySQLClient:
     def __init__(self, host, port, user, password, database):
-        self.connection = pymysql.connect(host=host, port=port, user=user, password=password, database=None)
-        self.cursor = self.connection.cursor()
         self.cursor = None
         self.connection = None
         self.host = host
@@ -27,8 +25,6 @@ class MySQLClient:
             print(f"Error connecting to MySQL: {e}")
             raise
 
-        self.cursor.execute(f"CREATE DATABASE IF NOT EXISTS {database}")
-        self.connection.select_db(database)
 
     def create_mysql_table(self, table_name):
         create_table_sql = f"""
@@ -71,6 +67,7 @@ class MySQLClient:
         results = self.cursor.fetchall()
         return [result[0] for result in results]
 
+    @reconnect
     def get_action_id(self, action):
         select_sql = f"SELECT id FROM action WHERE action = %s"
         self.cursor.execute(select_sql, (action,))
