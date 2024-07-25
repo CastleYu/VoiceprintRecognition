@@ -111,7 +111,7 @@ def asr():
     response = {
         'result': SUCCESS if text else FAILED,
         'data': {
-            ''
+            'text': text
         }
     }
     return jsonify(response)
