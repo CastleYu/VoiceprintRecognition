@@ -69,27 +69,34 @@ def load():
         return redirect(request.url)
 
     file_path = save_file(file, app.config['UPLOAD_FOLDER'])
+    try:
+        audio_emb = paddleVector.get_embedding(file_path)
 
-    audio_emb = paddleVector.get_embedding(file_path)
+        # 将特征向量插入 Milvus 并获取 ID
+        milvus_ids = milvus_client.insert(table_name, [audio_emb.tolist()])
+        milvus_client.create_index(table_name)
 
-    os.remove(file_path)
+        # 将 ID 和音频信息存储到 MySQL
+        mysql_client.create_mysql_table(table_name)
+        mysql_client.load_data_to_mysql(table_name, milvus_ids)
 
-    # 将特征向量插入 Milvus 并获取 ID
-    milvus_ids = milvus_client.insert(table_name, [audio_emb.tolist()])
-    milvus_client.create_index(table_name)
-
-    # 将 ID 和音频信息存储到 MySQL
-    mysql_client.create_mysql_table(table_name)
-    mysql_client.load_data_to_mysql(table_name, milvus_ids)
-
-    response = {
-        'result': SUCCESS,
-        'data': {
-            'user_id': 0,
-            'milvus_ids': milvus_ids,
-            'voiceprint': milvus_ids
+        response = {
+            'result': SUCCESS,
+            'data': {
+                'user_id': 0,
+                'milvus_ids': milvus_ids,
+                'voiceprint': milvus_ids
+            }
         }
-    }
+    except Exception as e:
+        response = {
+            'result': FAILED,
+            'data': {
+                'error': str(e)
+            }
+        }
+    finally:
+        os.remove(file_path)
     return jsonify(response)
 
 
@@ -103,54 +110,85 @@ def asr():
     file_path = save_file(file, app.config['UPLOAD_FOLDER'])
     try:
         text = paddleASR.recognize(file_path)
+        if text:
+            response = {
+                'result': SUCCESS,
+                'data': {
+                    'text': text
+                }
+            }
+        else:
+            response = {
+                'result': FAILED,
+                'data': {
+                    'error': 'Text not recognized'
+                }
+            }
     except Exception as e:
-        text = None
-
-    os.remove(file_path)
-
-    response = {
-        'result': SUCCESS if text else FAILED,
-        'data': {
-            'text': text
+        response = {
+            'result': FAILED,
+            'data': {
+                'error': str(e)
+            }
         }
-    }
+    finally:
+        os.remove(file_path)
+
     return jsonify(response)
 
 
 @app.route('/recognize', methods=['POST'])
 def recognize():
+    # 检查请求中的文件是否有效
     is_valid, message, file = check_file_in_request(request)
     if not is_valid:
         flash(message)
         return redirect(request.url)
 
+    # 保存文件到指定路径
     file_path = save_file(file, app.config['UPLOAD_FOLDER'])
 
-    audio_emb = paddleVector.get_embedding(file_path)
-    results = milvus_client.search(audio_emb, table_name, 1)
-    user_id = results[0][0].id
-    similar_distance = results[0][0].distance
-    similar_vector = np.array(results[0][0].entity.vec, dtype=np.float32)
+    try:
+        # 获取音频嵌入向量
+        audio_embedding = paddleVector.get_embedding(file_path)
 
-    similar = paddleVector.get_embeddings_score(similar_vector, audio_emb)
-    recognize_result = FAILED
-    if similar >= accuracy_threshold:
-        recognize_result = SUCCESS
-        text = paddleASR.recognize(file_path)
-    else:
-        text = ''
+        # 在 Milvus 中搜索相似音频
+        search_results = milvus_client.search(audio_embedding, table_name, 1)
+        user_id = search_results[0][0].id
+        similar_distance = search_results[0][0].distance
+        similar_vector = np.array(search_results[0][0].entity.vec, dtype=np.float32)
 
-    os.remove(file_path)
+        # 计算相似度评分
+        similarity_score = paddleVector.get_embeddings_score(similar_vector, audio_embedding)
 
-    response = {
-        'result': recognize_result,
-        'data': {
-            'user_id': user_id,
-            'similar_distance': similar_distance,
-            'similarity_score': similar,
-            'asr_result': text
+        # 根据相似度评分确定识别结果
+        if similarity_score >= accuracy_threshold:
+            recognize_result = SUCCESS
+            asr_result = paddleASR.recognize(file_path)
+        else:
+            recognize_result = FAILED
+            asr_result = ''
+
+        # 构建响应
+        response = {
+            'result': recognize_result,
+            'data': {
+                'user_id': user_id,
+                'similar_distance': similar_distance,
+                'similarity_score': similarity_score,
+                'asr_result': asr_result
+            }
         }
-    }
+    except Exception as e:
+        response = {
+            'result': FAILED,
+            'data': {
+                'error': str(e)
+            }
+        }
+    finally:
+        # 删除临时文件
+        os.remove(file_path)
 
     return jsonify(response)
 
