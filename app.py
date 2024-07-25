@@ -305,7 +305,7 @@ def match_action(action):
     best_match = similarities[0][0]
     return best_match
 
-@app.route('/search_action', methods=['POST'])
+@app.route('/search_action', methods=['GET'])
 def search_action():
     # 检查请求中是否包含指令部分
     if 'action' not in request.form:

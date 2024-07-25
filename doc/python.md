@@ -11,5 +11,9 @@ pip install librosa==0.10.1 -i https://pypi.tuna.tsinghua.edu.cn/simple
 pip install pymilvus -i https://pypi.tuna.tsinghua.edu.cn/simple
 pip install pymysql -i https://pypi.tuna.tsinghua.edu.cn/simple
 pip install transformers -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# pytorch
+Windows: pip install torch torchvision torchaudio
+Linux: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 ```
 
