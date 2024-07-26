@@ -4,6 +4,9 @@ import sys
 import numpy as np
 import yaml
 from flask import Flask, request, redirect, flash, jsonify
+from pydub import AudioSegment
+import noisereduce as nr
+from scipy.io import wavfile
 
 from action.action_matcher import *
 from audio.asr import PaddleSpeechRecognition, SpeechRecognitionAdapter
@@ -60,20 +63,61 @@ action_matcher = InstructionMatcher(models_path).load(MicomlMatcher('paraphrase-
 
 # action_matcher = InstructionMatcher(models_path).load(GoogleMatcher('google-bert-base-chinese'))
 
+def pre_process(audio_file):
+    audio = AudioSegment.from_wav(audio_file)
+    samples = np.array(audio.get_array_of_samples())
+
+    # 获取音频文件的采样率
+    rate, data = wavfile.read(audio_file)
+
+    # 使用noisereduce库进行降噪
+    reduced_noise = nr.reduce_noise(y=samples, sr=rate)
+
+    # 将降噪后的数据转换回AudioSegment
+    reduced_noise_audio = AudioSegment(
+        reduced_noise.tobytes(),
+        frame_rate=audio.frame_rate,
+        sample_width=audio.sample_width,
+        channels=audio.channels
+    )
+    # # 降低采样率到16000 Hz
+    # reduced_noise_audio = reduced_noise_audio.set_frame_rate(16000)
+
+    output_dir = "./processed"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # 保存降噪和降采样后的音频文件
+    filename = os.path.basename(audio_file)
+    output_file = os.path.join(output_dir, filename)
+    reduced_noise_audio.export(output_file, format="wav")
+
+    return output_file
+
 
 @app.route('/load', methods=['PUT'])
 def load():
-    is_valid, message, file = check_file_in_request(request)
+    is_valid, message, files = check_file_in_request(request)
     if not is_valid:
         flash(message)
         return redirect(request.url)
 
-    file_path = save_file(file, app.config['UPLOAD_FOLDER'])
+    file_paths = []
+    for file in files:
+        file_path = save_file(file, app.config['UPLOAD_FOLDER'])
+        file_paths.append(file_path)
+
     try:
-        audio_emb = paddleVector.get_embedding(file_path)
+        audio_embs = []
+        for file_path in file_paths:
+            pro_path = pre_process(file_path)
+            audio_emb = paddleVector.get_embedding(pro_path)
+            audio_embs.append(audio_emb)
+        audio_embs_array = np.array(audio_embs)
+        average_emb = np.mean(audio_embs_array, axis=0)
 
         # 将特征向量插入 Milvus 并获取 ID
-        milvus_ids = milvus_client.insert(table_name, [audio_emb.tolist()])
+        milvus_ids = milvus_client.insert(table_name, [average_emb.tolist()])
         milvus_client.create_index(table_name)
 
         # 将 ID 和音频信息存储到 MySQL
@@ -96,7 +140,9 @@ def load():
             }
         }
     finally:
-        os.remove(file_path)
+        for file_path in file_paths:
+            os.remove(file_path)
+
     return jsonify(response)
 
 
