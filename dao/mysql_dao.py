@@ -67,7 +67,6 @@ class MySQLClient:
         results = self.cursor.fetchall()
         return [result[0] for result in results]
 
-    @reconnect
     def get_action_id(self, action):
         select_sql = f"SELECT id FROM action WHERE action = %s"
         self.cursor.execute(select_sql, (action,))
