@@ -10,15 +10,19 @@ def allowed_file(filename):
 
 
 def check_file_in_request(request):
-    if 'audio_file1' not in request.files or 'audio_file2' not in request.files or 'audio_file3' not in request.files:
-        return False, 'No file part', None
+    files = []
+    index = 1
+    while f'audio_file{index}' in request.files:
+        file = request.files[f'audio_file{index}']
+        if file.filename == '':
+            return False, f'No selected file for audio_file{index}', None
+        if not allowed_file(file.filename):
+            return False, f'File type not allowed for audio_file{index}', None
+        files.append(file)
+        index += 1
 
-    files = [request.files['audio_file1'], request.files['audio_file2'], request.files['audio_file3']]
-    for file in files:
-        if (file.filename == ''):
-            return False, 'No selected file', None
-        if not (file and allowed_file(file.filename)):
-            return False, 'File type not allowed', None
+    if not files:
+        return False, 'No file parts', None
 
     return True, '', files
 

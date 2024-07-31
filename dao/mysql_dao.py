@@ -28,18 +28,22 @@ class MySQLClient:
 
     def create_mysql_table(self, table_name):
         create_table_sql = f"""
-        CREATE TABLE IF NOT EXISTS {table_name} (
-            id BIGINT AUTO_INCREMENT  PRIMARY KEY,
-            voiceprint BIGINT
-        );
-        """
+            CREATE TABLE IF NOT EXISTS {table_name} (
+                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(255),
+                voiceprint BIGINT,
+                permission_level SMALLINT
+            );
+            """
         self.cursor.execute(create_table_sql)
         self.connection.commit()
 
     def load_data_to_mysql(self, table_name, data):
-        insert_sql = f"INSERT INTO {table_name} (voiceprint) VALUES (%s)"
+        insert_sql = f"INSERT INTO {table_name} (username, voiceprint, permission_level) VALUES (%s, %s, %s)"
         self.cursor.executemany(insert_sql, data)
         self.connection.commit()
+        user_id = self.cursor.lastrowid
+        return user_id
 
     def create_action_table(self):
         create_table_sql = f"""

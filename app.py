@@ -27,6 +27,7 @@ def set_console_encoding(encoding='utf-8'):
 
 DEFAULT_TABLE = "audio_table"
 table_name = 'audio'
+user_table = 'user'
 SUCCESS = 'Success'
 FAILED = 'Failed'
 
@@ -121,15 +122,17 @@ def load():
         milvus_client.create_index(table_name)
 
         # 将 ID 和音频信息存储到 MySQL
-        mysql_client.create_mysql_table(table_name)
-        mysql_client.load_data_to_mysql(table_name, milvus_ids)
+        username = request.form.get('username')
+        permission_level = int(request.form.get('permission_level'))
+        mysql_client.create_mysql_table(user_table)
+        user_id = mysql_client.load_data_to_mysql(user_table, [(username, milvus_ids[0], permission_level)])
 
         response = {
             'result': SUCCESS,
             'data': {
-                'user_id': 0,
-                'milvus_ids': milvus_ids,
-                'voiceprint': milvus_ids
+                'user_id': user_id,
+                'voiceprint': milvus_ids[0],
+                'permission_level': permission_level
             }
         }
     except Exception as e:
