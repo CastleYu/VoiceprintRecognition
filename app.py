@@ -181,6 +181,18 @@ def get_all_user():
     }
     return jsonify(response)
 
+
+@app.route('/update_user', methods=['POST'])
+def update_user():
+    username = request.form.get('username')
+    permission_level = int(request.form.get('permission_level'))
+    user_id = int(request.form.get('id'))
+
+    mysql_client.update_user_info(user_table, user_id, username, permission_level)
+
+    return jsonify({'result': SUCCESS})
+
+
 @app.route('/asr', methods=['POST'])
 def asr():
     is_valid, message, file = check_file_in_request(request)

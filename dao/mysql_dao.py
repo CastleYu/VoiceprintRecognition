@@ -99,3 +99,25 @@ class MySQLClient:
 
         return users
 
+    def update_user_info(self, table_name, user_id, username=None, permission_level=None):
+        update_fields = []
+        update_values = []
+
+        if username is not None:
+            update_fields.append("username = %s")
+            update_values.append(username)
+
+        if permission_level is not None:
+            update_fields.append("permission_level = %s")
+            update_values.append(permission_level)
+
+        if not update_fields:
+            return
+
+        update_sql = f"UPDATE {table_name} SET {', '.join(update_fields)} WHERE id = %s"
+        update_values.append(user_id)
+
+        self.cursor.execute(update_sql, tuple(update_values))
+        self.connection.commit()
+
+        return
