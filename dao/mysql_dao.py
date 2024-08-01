@@ -2,6 +2,7 @@ import pymysql
 from pymysql.connections import Connection
 from pymysql.err import OperationalError
 
+
 class MySQLClient:
     def __init__(self, host, port, user, password, database):
         self.host = host
@@ -101,13 +102,17 @@ class MySQLClient:
 
     def delete_user(self, user_id):
         delete_sql = f"DELETE FROM user WHERE id = %s"
-        self.cursor.execute(delete_sql, (user_id,))
-        self.connection.commit()
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        cursor.execute(delete_sql, (user_id,))
+        connection.commit()
 
     def get_all_users(self):
         select_sql = "SELECT * FROM user"
-        self.cursor.execute(select_sql)
-        results = self.cursor.fetchall()
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        cursor.execute(select_sql)
+        results = cursor.fetchall()
 
         users = []
         for result in results:
@@ -138,8 +143,9 @@ class MySQLClient:
 
         update_sql = f"UPDATE {table_name} SET {', '.join(update_fields)} WHERE id = %s"
         update_values.append(user_id)
-
-        self.cursor.execute(update_sql, tuple(update_values))
-        self.connection.commit()
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        cursor.execute(update_sql, tuple(update_values))
+        connection.commit()
 
         return

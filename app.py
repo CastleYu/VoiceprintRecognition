@@ -2,10 +2,13 @@ import os.path
 import sys
 
 import numpy as np
+
+np.complex = np.complex128
+import noisereduce as nr
 import yaml
 from flask import Flask, request, redirect, flash, jsonify
+from flask_cors import CORS
 from pydub import AudioSegment
-import noisereduce as nr
 from scipy.io import wavfile
 
 from action.action_matcher import *
@@ -14,11 +17,11 @@ from audio.vector import PaddleSpeakerVerification, SpeakerVerificationAdapter
 from dao.milvus_dao import MilvusClient
 from dao.mysql_dao import MySQLClient
 from utils.file_utils import check_file_in_request, save_file
-from flask_cors import CORS
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # 用于闪现消息
 CORS(app)
+
 
 # 配置标准输出和标准错误的编码
 def set_console_encoding(encoding='utf-8'):
@@ -356,6 +359,7 @@ def search_action():
         }
     }
     return jsonify(response)
+
 
 @app.route('/get_all_action', methods=['GET'])
 def get_all_action():
