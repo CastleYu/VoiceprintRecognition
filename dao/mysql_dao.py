@@ -25,7 +25,6 @@ class MySQLClient:
             print(f"Error connecting to MySQL: {e}")
             raise
 
-
     def create_mysql_table(self, table_name):
         create_table_sql = f"""
             CREATE TABLE IF NOT EXISTS {table_name} (
