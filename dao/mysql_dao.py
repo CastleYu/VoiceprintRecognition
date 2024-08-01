@@ -1,7 +1,6 @@
 import pymysql
 from pymysql.err import OperationalError
 
-
 # Mysql数据库
 class MySQLClient:
     def __init__(self, host, port, user, password, database):
@@ -77,3 +76,26 @@ class MySQLClient:
         result = self.cursor.fetchone()
         ans = result[0] or None
         return ans
+
+    def delete_user(self, user_id):
+        delete_sql = f"DELETE FROM user WHERE id = %s"
+        self.cursor.execute(delete_sql, (user_id,))
+        self.connection.commit()
+
+    def get_all_users(self):
+        select_sql = "SELECT * FROM user"
+        self.cursor.execute(select_sql)
+        results = self.cursor.fetchall()
+
+        users = []
+        for result in results:
+            user = {
+                "id": result[0],
+                "username": result[1],
+                "voiceprint": result[2],
+                "permission_level": result[3]
+            }
+            users.append(user)
+
+        return users
+

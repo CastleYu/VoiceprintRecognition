@@ -14,10 +14,11 @@ from audio.vector import PaddleSpeakerVerification, SpeakerVerificationAdapter
 from dao.milvus_dao import MilvusClient
 from dao.mysql_dao import MySQLClient
 from utils.file_utils import check_file_in_request, save_file
+from flask_cors import CORS
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # 用于闪现消息
-
+CORS(app)
 
 # 配置标准输出和标准错误的编码
 def set_console_encoding(encoding='utf-8'):
@@ -57,7 +58,6 @@ ALLOWED_EXTENSIONS = {'wav'}
 
 paddleASR = SpeechRecognitionAdapter(PaddleSpeechRecognition())
 paddleVector = SpeakerVerificationAdapter(PaddleSpeakerVerification())
-action_set = mysql_client.get_all_actions()
 models_path = os.path.abspath(os.path.join('action', 'bert_models'))
 action_matcher = InstructionMatcher(models_path).load(MicomlMatcher('paraphrase-multilingual-MiniLM-L12-v2'))
 
@@ -148,6 +148,38 @@ def load():
 
     return jsonify(response)
 
+
+@app.route('/delete_user', methods=['POST'])
+def delete_user():
+    # 检查请求中是否包含指令部分
+    if 'user_id' not in request.form:
+        flash('No user_id part')
+        return redirect(request.url)
+
+    user_id = request.form['user_id']
+
+    # 检查指令是否为空
+    if user_id == '':
+        flash('No user_id provided')
+        return redirect(request.url)
+
+    # 从MySQL中删除指令
+    mysql_client.delete_user(user_id)
+
+    return jsonify({'result': SUCCESS})
+
+
+@app.route('/get_all_user', methods=['GET'])
+def get_all_user():
+    user_set = mysql_client.get_all_users()
+
+    response = {
+        'result': SUCCESS,
+        'data': {
+            "user_set": user_set
+        }
+    }
+    return jsonify(response)
 
 @app.route('/asr', methods=['POST'])
 def asr():
@@ -299,6 +331,7 @@ def search_action():
         flash('No action provided')
         return redirect(request.url)
 
+    action_set = mysql_client.get_all_actions()
     best_match, similarity_score = action_matcher.match(action, action_set)
     action_id = mysql_client.get_action_id(best_match)
     response = {
@@ -307,6 +340,18 @@ def search_action():
             "action_id": action_id,
             'best_match_action': best_match,
             'similarity_percent': f'{similarity_score * 100:.1f}'
+        }
+    }
+    return jsonify(response)
+
+@app.route('/get_all_action', methods=['GET'])
+def get_all_action():
+    action_set = mysql_client.get_all_actions()
+
+    response = {
+        'result': SUCCESS,
+        'data': {
+            "action_set": action_set
         }
     }
     return jsonify(response)
