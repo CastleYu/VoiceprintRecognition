@@ -233,17 +233,18 @@ def asr():
 @app.route('/recognize', methods=['POST'])
 def recognize():
     # 检查请求中的文件是否有效
-    is_valid, message, file = check_file_in_request(request)
+    is_valid, message, files = check_file_in_request(request)
     if not is_valid:
         flash(message)
         return redirect(request.url)
 
     # 保存文件到指定路径
-    file_path = save_file(file, app.config['UPLOAD_FOLDER'])
+    file_path = save_file(files[0], app.config['UPLOAD_FOLDER'])
 
     try:
+        pro_path = pre_process(file_path)
         # 获取音频嵌入向量
-        audio_embedding = paddleVector.get_embedding(file_path)
+        audio_embedding = paddleVector.get_embedding(pro_path)
 
         # 在 Milvus 中搜索相似音频
         search_results = milvus_client.search(audio_embedding, table_name, 1)
