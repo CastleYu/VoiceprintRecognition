@@ -1,29 +1,24 @@
 import pymysql
+from pymysql.connections import Connection
 from pymysql.err import OperationalError
 
-# Mysql数据库
+
 class MySQLClient:
     def __init__(self, host, port, user, password, database):
-        self.cursor = None
-        self.connection = None
         self.host = host
         self.port = port
         self.user = user
         self.password = password
         self.database = database
-        self.connect()
 
-    def connect(self):
+    def get_connection(self) -> Connection:
         try:
-            self.connection = pymysql.connect(host=self.host, port=self.port, user=self.user, password=self.password,
-                                              database=None)
-            self.cursor = self.connection.cursor()
-            self.cursor.execute(f"CREATE DATABASE IF NOT EXISTS {self.database}")
-            self.connection.select_db(self.database)
+            connection = pymysql.connect(host=self.host, port=self.port, user=self.user, password=self.password,
+                                         database=self.database)
+            return connection
         except OperationalError as e:
             print(f"Error connecting to MySQL: {e}")
             raise
-
 
     def create_mysql_table(self, table_name):
         create_table_sql = f"""
@@ -34,14 +29,22 @@ class MySQLClient:
                 permission_level SMALLINT
             );
             """
-        self.cursor.execute(create_table_sql)
-        self.connection.commit()
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        cursor.execute(create_table_sql)
+        connection.commit()
+        cursor.close()
+        connection.close()
 
     def load_data_to_mysql(self, table_name, data):
         insert_sql = f"INSERT INTO {table_name} (username, voiceprint, permission_level) VALUES (%s, %s, %s)"
-        self.cursor.executemany(insert_sql, data)
-        self.connection.commit()
-        user_id = self.cursor.lastrowid
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        cursor.executemany(insert_sql, data)
+        connection.commit()
+        user_id = cursor.lastrowid
+        cursor.close()
+        connection.close()
         return user_id
 
     def create_action_table(self):
@@ -51,41 +54,65 @@ class MySQLClient:
             action VARCHAR(255) UNIQUE
         );
         """
-        self.cursor.execute(create_table_sql)
-        self.connection.commit()
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        cursor.execute(create_table_sql)
+        connection.commit()
+        cursor.close()
+        connection.close()
 
     def insert_action(self, action):
         insert_sql = f"INSERT INTO action (action) VALUES (%s)"
-        self.cursor.execute(insert_sql, (action,))
-        self.connection.commit()
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        cursor.execute(insert_sql, (action,))
+        connection.commit()
+        cursor.close()
+        connection.close()
 
     def delete_action(self, action):
         delete_sql = f"DELETE FROM action WHERE action = %s"
-        self.cursor.execute(delete_sql, (action,))
-        self.connection.commit()
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        cursor.execute(delete_sql, (action,))
+        connection.commit()
+        cursor.close()
+        connection.close()
 
     def get_all_actions(self):
         select_sql = "SELECT action FROM action"
-        self.cursor.execute(select_sql)
-        results = self.cursor.fetchall()
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        cursor.execute(select_sql)
+        results = cursor.fetchall()
+        cursor.close()
+        connection.close()
         return [result[0] for result in results]
 
     def get_action_id(self, action):
         select_sql = f"SELECT id FROM action WHERE action = %s"
-        self.cursor.execute(select_sql, (action,))
-        result = self.cursor.fetchone()
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        cursor.execute(select_sql, (action,))
+        result = cursor.fetchone()
+        cursor.close()
+        connection.close()
         ans = result[0] or None
         return ans
 
     def delete_user(self, user_id):
         delete_sql = f"DELETE FROM user WHERE id = %s"
-        self.cursor.execute(delete_sql, (user_id,))
-        self.connection.commit()
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        cursor.execute(delete_sql, (user_id,))
+        connection.commit()
 
     def get_all_users(self):
         select_sql = "SELECT * FROM user"
-        self.cursor.execute(select_sql)
-        results = self.cursor.fetchall()
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        cursor.execute(select_sql)
+        results = cursor.fetchall()
 
         users = []
         for result in results:
@@ -116,8 +143,9 @@ class MySQLClient:
 
         update_sql = f"UPDATE {table_name} SET {', '.join(update_fields)} WHERE id = %s"
         update_values.append(user_id)
-
-        self.cursor.execute(update_sql, tuple(update_values))
-        self.connection.commit()
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        cursor.execute(update_sql, tuple(update_values))
+        connection.commit()
 
         return
