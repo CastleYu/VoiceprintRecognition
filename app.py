@@ -1,10 +1,8 @@
 import os.path
 import sys
 
-import numpy as np
-
-np.complex = np.complex128
 import noisereduce as nr
+import numpy as np
 import yaml
 from flask import Flask, request, redirect, flash, jsonify
 from flask_cors import CORS
@@ -139,10 +137,11 @@ def load():
             }
         }
     except Exception as e:
+        print(e)
         response = {
             'result': FAILED,
             'data': {
-                'error': str(e)
+                'error': type(e).__name__
             }
         }
     finally:
@@ -221,10 +220,11 @@ def asr():
                 }
             }
     except Exception as e:
+        print(e)
         response = {
             'result': FAILED,
             'data': {
-                'error': str(e)
+                'error': type(e).__name__
             }
         }
     finally:
@@ -264,6 +264,7 @@ def recognize():
             asr_result = paddleASR.recognize(file_path)
         else:
             recognize_result = FAILED
+            user_id = '0'
             asr_result = ''
 
         # 构建响应
@@ -273,14 +274,16 @@ def recognize():
                 'user_id': user_id,
                 'similar_distance': similar_distance,
                 'similarity_score': similarity_score,
-                'asr_result': asr_result
+                'asr_result': asr_result,
+                'possible_action': do_search_action(asr_result)[1]
             }
         }
     except Exception as e:
+        print(e)
         response = {
             'result': FAILED,
             'data': {
-                'error': str(e)
+                'error': type(e).__name__
             }
         }
     finally:
@@ -346,10 +349,7 @@ def search_action():
     if action == '':
         flash('No action provided')
         return redirect(request.url)
-
-    action_set = mysql_client.get_all_actions()
-    best_match, similarity_score = action_matcher.match(action, action_set)
-    action_id = mysql_client.get_action_id(best_match)
+    action_id, best_match, similarity_score = do_search_action(action)
     response = {
         'result': SUCCESS,
         'data': {
@@ -359,6 +359,13 @@ def search_action():
         }
     }
     return jsonify(response)
+
+
+def do_search_action(action):
+    action_set = mysql_client.get_all_actions()
+    best_match, similarity_score = action_matcher.match(action, action_set)
+    action_id = mysql_client.get_action_id(best_match)
+    return action_id, best_match, similarity_score
 
 
 @app.route('/get_all_action', methods=['GET'])
