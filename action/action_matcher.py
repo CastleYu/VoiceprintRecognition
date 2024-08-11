@@ -24,10 +24,10 @@ class InstructionMatcher:
 
 class MicomlMatcher:
     def __init__(self, model_name=None):
-        self.model_name = model_name or 'google-bert-base-chinese'
+        self.model_name = model_name or 'paraphrase-multilingual-MiniLM-L12-v2'
         self._lac = None
         self._model_bert = None
-        self._lac = LACTokenizer()
+        self._lac = LACTokenizer()  # 百度LAC分词
         self.threshold = 0.85
 
     def load_model(self, model_dir):
@@ -62,7 +62,7 @@ class GoogleMatcher:
     def __init__(self, model_name=None):
         self._model = None
         self._tokenizer = None
-        self.model_name = model_name or 'paraphrase-multilingual-MiniLM-L12-v2'
+        self.model_name = model_name or 'google-bert-base-chinese'
         self.threshold = 0.85
 
     def load_model(self, model_dir):
