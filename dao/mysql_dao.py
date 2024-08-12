@@ -29,11 +29,20 @@ class MySQLClient:
 
     def load_data_to_mysql(self, table_name, data):
         connection = self.engine.connect()
-        table = self.user_table if table_name == 'user' else None
-        if not table:
+        if table_name == 'user':
+            table = self.user_table
+        else:
             return
         try:
-            connection.execute(table.insert(), data)
+            formatted_data = [
+                {
+                    'username': entry[0],
+                    'voiceprint': entry[1],
+                    'permission_level': entry[2]
+                }
+                for entry in data
+            ]
+            connection.execute(table.insert(), formatted_data)
             connection.commit()
         except SQLAlchemyError as e:
             connection.rollback()
@@ -120,8 +129,9 @@ class MySQLClient:
             connection.close()
 
     def update_user_info(self, table_name, user_id, username=None, permission_level=None):
-        table = self.user_table if table_name == 'user' else None
-        if not table:
+        if table_name == 'user':
+            table = self.user_table
+        else:
             return
 
         update_fields = {}
