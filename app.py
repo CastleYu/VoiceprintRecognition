@@ -8,7 +8,7 @@ from flask import Flask, request, redirect, flash, jsonify
 from flask_cors import CORS
 from pydub import AudioSegment
 from scipy.io import wavfile
-
+import traceback
 from action.action_matcher import *
 from audio.asr import PaddleSpeechRecognition, SpeechRecognitionAdapter
 from audio.vector import PaddleSpeakerVerification, SpeakerVerificationAdapter
@@ -137,7 +137,7 @@ def load():
             }
         }
     except Exception as e:
-        print(e)
+        traceback.print_exc()
         response = {
             'result': FAILED,
             'data': {
@@ -220,7 +220,7 @@ def asr():
                 }
             }
     except Exception as e:
-        print(e)
+        traceback.print_exc()
         response = {
             'result': FAILED,
             'data': {
@@ -279,7 +279,7 @@ def recognize():
             }
         }
     except Exception as e:
-        print(e)
+        traceback.print_exc()
         response = {
             'result': FAILED,
             'data': {

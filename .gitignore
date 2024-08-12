@@ -4,7 +4,7 @@
 /uploads/
 .idea/
 deprecated/
-
+processed/
 # General Python Project ignore
 # Byte-compiled / optimized / DLL files
 __pycache__/

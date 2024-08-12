@@ -3,6 +3,10 @@ from abc import ABC, abstractmethod
 import paddle
 from paddlespeech.cli.vector import VectorExecutor
 
+version = paddle.__version__
+if version != '2.4.1':
+    raise RuntimeError(f"Paddle版本不正确，期望为2.4.1，实际为{version}")
+
 
 class SpeakerVerification(ABC):
     @abstractmethod

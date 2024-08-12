@@ -17,23 +17,26 @@ conda create --name speech python=3.8
 以下几组选一组运行即可，效果理应相同
 
 ```shell
-pip install paddlepaddle==2.4.1 pytest-runner paddlespeech==1.4.1 librosa==0.10.1 pymilvus pymysql transformers sentence_transformers LAC noisereduce pydub flask_cors sqlalchemy -i https://pypi.tuna.tsinghua.edu.cn/simple
+pip install paddlepaddle==2.4.1 pytest-runner paddlespeech==1.4.1 -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+```shell
+pip install librosa==0.10.1 pymilvus pymysql transformers sentence_transformers LAC noisereduce pydub flask_cors sqlalchemy -i https://pypi.tuna.tsinghua.edu.cn/simple 
 ```
 
-```bat
-pip install paddlepaddle==2.4.1 -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install pytest-runner -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install paddlespeech==1.4.1 -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install librosa==0.10.1 -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install pymilvus -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install pymysql -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install transformers -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install sentence_transformers -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install LAC -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install pydub -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install noisereduce -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install flask_cors -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install sqlalchemy -i https://pypi.tuna.tsinghua.edu.cn/simple
+```shell 
+pip install paddlepaddle==2.4.1 -i https://pypi.tuna.tsinghua.edu.cn/simple 
+pip install pytest-runner -i https://pypi.tuna.tsinghua.edu.cn/simple 
+pip install paddlespeech==1.4.1 -i https://pypi.tuna.tsinghua.edu.cn/simple 
+pip install librosa==0.10.1 -i https://pypi.tuna.tsinghua.edu.cn/simple 
+pip install pymilvus -i https://pypi.tuna.tsinghua.edu.cn/simple 
+pip install pymysql -i https://pypi.tuna.tsinghua.edu.cn/simple 
+pip install transformers -i https://pypi.tuna.tsinghua.edu.cn/simple 
+pip install sentence_transformers -i https://pypi.tuna.tsinghua.edu.cn/simple 
+pip install LAC -i https://pypi.tuna.tsinghua.edu.cn/simple 
+pip install pydub -i https://pypi.tuna.tsinghua.edu.cn/simple 
+pip install noisereduce -i https://pypi.tuna.tsinghua.edu.cn/simple 
+pip install flask_cors -i https://pypi.tuna.tsinghua.edu.cn/simple 
+pip install sqlalchemy -i https://pypi.tuna.tsinghua.edu.cn/simple 
 ```
 
 [//]: # (```shell)

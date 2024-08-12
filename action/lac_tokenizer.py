@@ -3,6 +3,7 @@ import os
 from LAC import LAC
 
 
+# 百度LAC分词器，带<去停用词>功能
 class LACTokenizer:
     def __init__(self, seg_mode='lac', stopwords_file='stopwords.txt'):
         if stopwords_file:

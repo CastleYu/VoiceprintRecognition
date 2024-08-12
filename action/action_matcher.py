@@ -13,7 +13,7 @@ class InstructionMatcher:
         self.models_dir = models_dir
         self._matcher = matcher
 
-    def match(self, input_instruction, instruction_set, threshold=0.85):
+    def match(self, input_instruction, instruction_set, threshold=0.8):
         return self._matcher.match(input_instruction, instruction_set, threshold)
 
     def load(self, matcher):
@@ -28,7 +28,7 @@ class MicomlMatcher:
         self._lac = None
         self._model_bert = None
         self._lac = LACTokenizer()  # 百度LAC分词
-        self.threshold = 0.85
+        self.threshold = 0.8
 
     def load_model(self, model_dir):
         model_full_path = str(os.path.join(model_dir, self.model_name))
@@ -63,7 +63,7 @@ class GoogleMatcher:
         self._model = None
         self._tokenizer = None
         self.model_name = model_name or 'google-bert-base-chinese'
-        self.threshold = 0.85
+        self.threshold = 0.8
 
     def load_model(self, model_dir):
         model_full_path = str(os.path.join(model_dir, self.model_name))
@@ -90,27 +90,3 @@ class GoogleMatcher:
         inputs = self._tokenizer(text, return_tensors='pt')
         outputs = self._model(**inputs)
         return outputs.last_hidden_state.mean(dim=1).detach().numpy()
-
-
-def test():
-    print("start to load models")
-    model_dir = os.path.join('bert_models')
-    im = InstructionMatcher(model_dir)
-    micoml_matcher = im.load(MicomlMatcher('paraphrase-multilingual-MiniLM-L12-v2'))
-    google_matcher = im.load(GoogleMatcher('google-bert-base-chinese'))
-    print("loading finished")
-
-    instruction_set = ["打开门", "关闭门", "打开报表"]
-    input_instruction = "把门开开"
-
-    # 使用 MicomlMatcher
-    result_micoml = micoml_matcher.match(input_instruction, instruction_set)
-    print(f"MicomlMatcher Result: {result_micoml}")
-
-    # 使用 GoogleMatcher
-    result_google = google_matcher.match(input_instruction, instruction_set)
-    print(f"GoogleMatcher Result: {result_google}")
-
-
-if __name__ == '__main__':
-    test()
