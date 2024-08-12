@@ -1,4 +1,3 @@
-# Milvus数据库
 from pymilvus import Collection, CollectionSchema, FieldSchema, DataType, connections, utility
 
 
@@ -42,3 +41,32 @@ class MilvusClient:
         results = collection.search(data=[query_vectors], anns_field="vec", param=search_params, limit=top_k,
                                     output_fields=['vec'])
         return results
+
+    def delete_by_id(self, table_name, id_to_delete):
+        # 确保集合已经创建
+        collection = self.create_collection(table_name)
+        # 删除指定 ID 的数据
+        collection.delete(f"id in [{id_to_delete}]")
+        collection.compact()
+        # 检查删除是否成功
+        result = collection.query(f"id in [{id_to_delete}]")
+        return len(result) == 0  # 如果返回空列表，表示删除成功
+
+    def delete_all(self, table_name):
+        # 确保集合已经创建
+        collection = self.create_collection(table_name)
+        # 删除集合中的所有数据
+        collection.delete("id >= 0")
+        collection.compact()
+        # 检查是否已删除所有数据
+        result = collection.query("id >= 0")
+        if len(result) == 0:  # 如果返回空列表，表示所有数据已删除
+            return
+        else:
+            print(result)
+            raise RuntimeError("milvus delete all failed")
+
+    def query_all(self, table_name):
+        collection = self.create_collection(table_name)
+        result = collection.query("id >= 0")
+        print(result)

@@ -46,7 +46,7 @@ class MySQLClient:
             connection.commit()
         except SQLAlchemyError as e:
             connection.rollback()
-            print(f"Error occurred: {e}")
+            print(f"MYSQL Error occurred: {e}")
         finally:
             connection.close()
 
@@ -60,7 +60,7 @@ class MySQLClient:
             connection.commit()
         except SQLAlchemyError as e:
             connection.rollback()
-            print(f"Error occurred: {e}")
+            print(f"MYSQL Error occurred: {e}")
         finally:
             connection.close()
 
@@ -71,7 +71,7 @@ class MySQLClient:
             connection.commit()
         except SQLAlchemyError as e:
             connection.rollback()
-            print(f"Error occurred: {e}")
+            print(f"MYSQL Error occurred: {e}")
         finally:
             connection.close()
 
@@ -81,7 +81,7 @@ class MySQLClient:
             result = connection.execute(select(self.action_table.c.action)).fetchall()
             return [row[0] for row in result]
         except SQLAlchemyError as e:
-            print(f"Error occurred: {e}")
+            print(f"MYSQL Error occurred: {e}")
             return []
         finally:
             connection.close()
@@ -93,7 +93,7 @@ class MySQLClient:
                 select(self.action_table.c.id).where(self.action_table.c.action == action)).fetchone()
             return result[0] if result else None
         except SQLAlchemyError as e:
-            print(f"Error occurred: {e}")
+            print(f"MYSQL Error occurred: {e}")
             return None
         finally:
             connection.close()
@@ -105,7 +105,18 @@ class MySQLClient:
             connection.commit()
         except SQLAlchemyError as e:
             connection.rollback()
-            print(f"Error occurred: {e}")
+            print(f"MYSQL Error occurred: {e}")
+        finally:
+            connection.close()
+
+    def delete_all_users(self):
+        connection = self.engine.connect()
+        try:
+            connection.execute(delete(self.user_table))
+            connection.commit()
+        except SQLAlchemyError as e:
+            connection.rollback()
+            print(f"MYSQL Error occurred: {e}")
         finally:
             connection.close()
 
@@ -123,8 +134,20 @@ class MySQLClient:
                 })
             return users
         except SQLAlchemyError as e:
-            print(f"Error occurred: {e}")
+            print(f"MYSQL Error occurred: {e}")
             return []
+        finally:
+            connection.close()
+
+    def find_user_name_by_id(self, query_id):
+        connection = self.engine.connect()
+        try:
+            result = connection.execute(
+                select(self.user_table.c.username).where(self.user_table.c.voiceprint == query_id)).fetchone()
+            return result[0] if result else None
+        except SQLAlchemyError as e:
+            print(f"MYSQL Error occurred: {e}")
+            return None
         finally:
             connection.close()
 
@@ -149,6 +172,18 @@ class MySQLClient:
             connection.commit()
         except SQLAlchemyError as e:
             connection.rollback()
-            print(f"Error occurred: {e}")
+            print(f"MYSQL Error occurred: {e}")
+        finally:
+            connection.close()
+
+    def get_voiceprint_by_id(self, user_id):
+        connection = self.engine.connect()
+        try:
+            result = connection.execute(
+                select(self.user_table.c.voiceprint).where(self.user_table.c.id == user_id)).fetchone()
+            return result[0] if result else None
+        except SQLAlchemyError as e:
+            print(f"MYSQL Error occurred: {e}")
+            return None
         finally:
             connection.close()

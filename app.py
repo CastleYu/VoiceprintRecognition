@@ -1,5 +1,6 @@
 import os.path
 import sys
+import traceback
 
 import noisereduce as nr
 import numpy as np
@@ -8,7 +9,7 @@ from flask import Flask, request, redirect, flash, jsonify
 from flask_cors import CORS
 from pydub import AudioSegment
 from scipy.io import wavfile
-import traceback
+
 from action.action_matcher import *
 from audio.asr import PaddleSpeechRecognition, SpeechRecognitionAdapter
 from audio.vector import PaddleSpeakerVerification, SpeakerVerificationAdapter
@@ -166,6 +167,8 @@ def delete_user():
         return redirect(request.url)
 
     # 从MySQL中删除指令
+    voiceprint_id = mysql_client.get_voiceprint_by_id(user_id)
+    milvus_client.delete_by_id(table_name, voiceprint_id)
     mysql_client.delete_user(user_id)
 
     return jsonify({'result': SUCCESS})
@@ -182,6 +185,19 @@ def get_all_user():
         }
     }
     return jsonify(response)
+
+
+@app.route('/delete_all_user', methods=['GET'])
+def delete_all_user():
+    result = FAILED
+    try:
+        mysql_client.delete_all_users()
+        milvus_client.delete_all(table_name)
+        result = SUCCESS
+    except Exception as e:
+        traceback.print_exc()
+    finally:
+        return jsonify({"result": result})
 
 
 @app.route('/update_user', methods=['POST'])
@@ -251,26 +267,33 @@ def recognize():
 
         # 在 Milvus 中搜索相似音频
         search_results = milvus_client.search(audio_embedding, table_name, 1)
-        user_id = search_results[0][0].id
-        similar_distance = search_results[0][0].distance
-        similar_vector = np.array(search_results[0][0].entity.vec, dtype=np.float32)
+        user_name = 'None'
+        similar_distance = '0'
+        similarity_score = '0'
+        recognize_result = FAILED
+        user_id = '0'
+        asr_result = ''
 
-        # 计算相似度评分
-        similarity_score = paddleVector.get_embeddings_score(similar_vector, audio_embedding)
+        if search_results:
+            user_id = str(search_results[0][0].id)
+            user_name = mysql_client.find_user_name_by_id(user_id)
+            similar_distance = search_results[0][0].distance
+            similar_vector = np.array(search_results[0][0].entity.vec, dtype=np.float32)
 
-        # 根据相似度评分确定识别结果
-        if similarity_score >= accuracy_threshold:
-            recognize_result = SUCCESS
-            asr_result = paddleASR.recognize(file_path)
-        else:
-            recognize_result = FAILED
-            user_id = '0'
-            asr_result = ''
+            # 计算相似度评分
+            similarity_score = paddleVector.get_embeddings_score(similar_vector, audio_embedding)
+
+            # 根据相似度评分确定识别结果
+            if similarity_score >= accuracy_threshold:
+                recognize_result = SUCCESS
+                asr_result = paddleASR.recognize(file_path)
+
 
         # 构建响应
         response = {
             'result': recognize_result,
             'data': {
+                'username': user_name,
                 'user_id': user_id,
                 'similar_distance': similar_distance,
                 'similarity_score': similarity_score,
@@ -370,6 +393,7 @@ def do_search_action(action):
 
 @app.route('/get_all_action', methods=['GET'])
 def get_all_action():
+    milvus_client.query_all(table_name)
     action_set = mysql_client.get_all_actions()
 
     response = {
