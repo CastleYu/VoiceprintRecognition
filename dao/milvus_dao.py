@@ -5,20 +5,24 @@ class MilvusClient:
     def __init__(self, host, port):
         connections.connect(alias='default', host=host, port=port)
 
+
     def create_collection(self, table_name):
         # 检查集合是否已经存在
         if utility.has_collection(table_name):
-            return Collection(name=table_name)
+            collection = Collection(name=table_name)
+            collection.load()
+            return collection
 
         # 定义集合的 schema
         fields = [
-            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),  # 主键
+            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),  # 主键s
             FieldSchema(name="vec", dtype=DataType.FLOAT_VECTOR, dim=192)
         ]
         schema = CollectionSchema(fields, description="audio collection")
 
         # 创建集合
         collection = Collection(name=table_name, schema=schema)
+        collection.load()
         return collection
 
     def insert(self, table_name, vectors):

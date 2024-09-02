@@ -52,6 +52,7 @@ accuracy_threshold = 0.8
 similarity_threshold = 0.8
 
 milvus_client = MilvusClient(config['milvus']['host'], config['milvus']['port'])
+milvus_client.create_collection(table_name)
 mysql_client = MySQLClient(config['mysql']['host'], config['mysql']['port'], config['mysql']['user'],
                            config['mysql']['password'], config['mysql']['database'])
 
