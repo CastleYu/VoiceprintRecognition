@@ -1,7 +1,11 @@
 # 声纹/指令识别
 
-- 前端：https://gitee.com/gailingtuo/speech_frontend
-- 后端：https://github.com/tttungwu/Speech
+- 前端
+  1. https://gitee.com/gailingtuo/speech_frontend
+  2. https://gitee.com/muziyuc/SpeechSimpleFrontend
+- 后端
+  1. https://github.com/tttungwu/Speech
+  2. https://gitee.com/muziyuc/VoiceprintRecognition
 
 
 ## build
