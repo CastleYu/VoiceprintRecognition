@@ -1,4 +1,5 @@
 import os.path
+import traceback
 
 import requests
 from requests.compat import getproxies
@@ -7,6 +8,7 @@ from tqdm import tqdm
 from config import ROOT_DIR
 
 API = 'https://api.github.com/repos/CastleYu/VoiceprintRecognition/releases'
+RESOURCES_KEYWORD = 'resources'
 WANTED_RESOURCES = ['google-bert-base-chinese.zip', 'paraphrase-multilingual-MiniLM-L12-v2.zip']
 RESOURCES_DIR = os.path.join(ROOT_DIR, 'action', 'bert_models')
 
@@ -26,7 +28,7 @@ def update_resources():
 
     for i in data:
         tag_name = i['tag_name']
-        if 'resources' in tag_name:
+        if RESOURCES_KEYWORD in tag_name:
             download_resources(i['assets'])
             return True
 
@@ -58,9 +60,10 @@ def download_resources(assets_list):
                         f.write(data)
                         bar.update(len(data))
 
-                print(f"\nDownloaded {file_name} successfully.")
+                print(f"\n下载资源 {asset['name']} 成功.")
             except requests.exceptions.RequestException as e:
-                print(f"Failed to download {asset['name']}: {e}")
+                traceback.print_exc()
+                print(f"下载资源 {asset['name']} 失败: {e}")
 
 
 if __name__ == '__main__':
