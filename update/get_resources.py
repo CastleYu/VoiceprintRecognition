@@ -63,7 +63,10 @@ def download_resources(assets_list):
                 print(f"\n下载资源 {asset['name']} 成功.")
             except requests.exceptions.RequestException as e:
                 traceback.print_exc()
+                file_name = os.path.join(RESOURCES_DIR, asset['name'])
                 print(f"下载资源 {asset['name']} 失败: {e}")
+                if os.path.exists(file_name):
+                    os.remove(file_name)
 
 
 if __name__ == '__main__':
