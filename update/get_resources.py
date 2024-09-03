@@ -1,12 +1,24 @@
+import os.path
+
 import requests
-from requests.compat import getproxies as get_system_proxies
+from requests.compat import getproxies
 from tqdm import tqdm
 
-API = 'https://gitee.com/api/v5/repos/muziyuc/VoiceprintRecognition/releases?page=1&per_page=20'
+from config import ROOT_DIR
+
+API = 'https://api.github.com/repos/CastleYu/VoiceprintRecognition/releases'
 WANTED_RESOURCES = ['google-bert-base-chinese.zip', 'paraphrase-multilingual-MiniLM-L12-v2.zip']
+RESOURCES_DIR = os.path.join(ROOT_DIR, 'action', 'bert_models')
 
 
-def get_resources():
+def get_system_proxies():
+    proxies = getproxies()
+    proxies['https'] = proxies['http']
+    proxies.pop('ftp')
+    return proxies
+
+
+def update_resources():
     response = requests.get(API, proxies=get_system_proxies())
     data = response.json()
     if not isinstance(data, list):
@@ -32,7 +44,7 @@ def download_resources(assets_list):
                 # 获取文件大小信息
                 total_size_in_bytes = int(response.headers.get('content-length', 0))
                 block_size = 1024  # 每块的大小
-                file_name = asset['name']
+                file_name = os.path.join(RESOURCES_DIR, asset['name'])
 
                 # 使用 tqdm 显示下载进度条
                 with open(file_name, 'wb') as f, tqdm(
@@ -49,3 +61,7 @@ def download_resources(assets_list):
                 print(f"\nDownloaded {file_name} successfully.")
             except requests.exceptions.RequestException as e:
                 print(f"Failed to download {asset['name']}: {e}")
+
+
+if __name__ == '__main__':
+    update_resources()

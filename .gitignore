@@ -5,7 +5,7 @@
 .idea/
 deprecated/
 processed/
-**/*test**
+**/**test**
 
 # General Python Project ignore
 # Byte-compiled / optimized / DLL files

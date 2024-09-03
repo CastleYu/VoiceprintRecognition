@@ -1,5 +1,7 @@
 import os
 
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 class Milvus:
     host = '120.24.44.238'
