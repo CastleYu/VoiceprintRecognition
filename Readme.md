@@ -20,25 +20,15 @@ conda create --name speech python=3.8
 请**有序**完成下列安装
 (出现 `paddlespeech` 需要 `librosa==0.8.1` 警告属于正常现象)
 ```shell
-pip install paddlepaddle==2.4.1 pytest-runner  -i https://pypi.tuna.tsinghua.edu.cn/simple 
+pip install paddlepaddle==2.4.1 pytest-runner  -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 ```shell
-pip install librosa==0.10.1 pymilvus pymysql transformers sentence_transformers LAC pydub noisereduce flask_cors sqlalchemy -i https://pypi.tuna.tsinghua.edu.cn/simple 
+pip install librosa==0.10.1 pymilvus pymysql transformers sentence_transformers LAC pydub noisereduce flask_cors sqlalchemy -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
-```shell 
-pip install paddlepaddle==2.4.1 -i https://pypi.tuna.tsinghua.edu.cn/simple 
-pip install pytest-runner -i https://pypi.tuna.tsinghua.edu.cn/simple 
-pip install paddlespeech==1.4.1 -i https://pypi.tuna.tsinghua.edu.cn/simple 
-pip install librosa==0.10.1 -i https://pypi.tuna.tsinghua.edu.cn/simple 
-pip install pymilvus -i https://pypi.tuna.tsinghua.edu.cn/simple 
-pip install pymysql -i https://pypi.tuna.tsinghua.edu.cn/simple 
-pip install transformers -i https://pypi.tuna.tsinghua.edu.cn/simple 
-pip install sentence_transformers -i https://pypi.tuna.tsinghua.edu.cn/simple 
-pip install LAC -i https://pypi.tuna.tsinghua.edu.cn/simple 
-pip install pydub -i https://pypi.tuna.tsinghua.edu.cn/simple 
-pip install noisereduce -i https://pypi.tuna.tsinghua.edu.cn/simple 
-pip install flask_cors -i https://pypi.tuna.tsinghua.edu.cn/simple 
-pip install sqlalchemy -i https://pypi.tuna.tsinghua.edu.cn/simple 
+```shell
+pip install pytest-runner -i https://pypi.tuna.tsinghua.edu.cn/simple
+pip install paddlespeech==1.4.1 -i https://pypi.tuna.tsinghua.edu.cn/simple
+
 ```
 
 [//]: # (```shell)
@@ -49,7 +39,8 @@ pip install sqlalchemy -i https://pypi.tuna.tsinghua.edu.cn/simple
 #### pytorch
 - Windows:
 ```sh
-pip install torch torchvision torchaudio
+pip install torch
+pip install torchvision torchaudio -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 - Linux:
 ```sh
