@@ -1,4 +1,4 @@
-from const.http_const import SUCCESS, FAILED
+from const import SUCCESS, FAILED
 
 
 class QuickResponse:
