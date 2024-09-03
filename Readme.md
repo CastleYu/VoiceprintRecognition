@@ -19,6 +19,12 @@ conda create --name speech python=3.8
 ### 安装必要的包
 请**有序**完成下列安装
 (出现 `paddlespeech` 需要 `librosa==0.8.1` 警告属于正常现象)
+```shell
+pip install paddlepaddle==2.4.1 pytest-runner  -i https://pypi.tuna.tsinghua.edu.cn/simple 
+```
+```shell
+pip install librosa==0.10.1 pymilvus pymysql transformers sentence_transformers LAC pydub noisereduce flask_cors sqlalchemy -i https://pypi.tuna.tsinghua.edu.cn/simple 
+```
 ```shell 
 pip install paddlepaddle==2.4.1 -i https://pypi.tuna.tsinghua.edu.cn/simple 
 pip install pytest-runner -i https://pypi.tuna.tsinghua.edu.cn/simple 

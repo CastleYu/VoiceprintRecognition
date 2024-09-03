@@ -1,102 +1,37 @@
 import os.path
-import sys
 import traceback
 
-import noisereduce as nr
 import numpy as np
-import yaml
 from flask import Flask, request, redirect, flash, jsonify
 from flask_cors import CORS
-from pydub import AudioSegment
-from scipy.io import wavfile
+from utils.responseU import QuickResponse as qr
 
+import config
 from action.action_matcher import *
 from audio.asr import PaddleSpeechRecognition, SpeechRecognitionAdapter
 from audio.vector import PaddleSpeakerVerification, SpeakerVerificationAdapter
+from const import AUDIO_TABLE, USER_TABLE, SUCCESS, FAILED
 from dao.milvus_dao import MilvusClient
 from dao.mysql_dao import MySQLClient
-from utils.file_utils import check_file_in_request, save_file
+from utils.audioU import pre_process
+from utils.fileU import check_file_in_request, save_file
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # 用于闪现消息
 CORS(app)
 
+accuracy_threshold = config.Algorithm.threshold
 
-# 配置标准输出和标准错误的编码
-def set_console_encoding(encoding='utf-8'):
-    sys.stdout.reconfigure(encoding=encoding)
-    sys.stderr.reconfigure(encoding=encoding)
-
-
-DEFAULT_TABLE = "audio_table"
-table_name = 'audio'
-user_table = 'user'
-SUCCESS = 'Success'
-FAILED = 'Failed'
-
-
-# 读取配置文件
-def load_config(config_path='config.yaml'):
-    with open(config_path, 'r') as file:
-        config = yaml.safe_load(file)
-    return config
-
-
-config = load_config()
-
-# 设置文件上传路径
-UPLOAD_FOLDER = 'uploads'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-accuracy_threshold = 0.8
-similarity_threshold = 0.8
-
-milvus_client = MilvusClient(config['milvus']['host'], config['milvus']['port'])
-milvus_client.create_collection(table_name)
-mysql_client = MySQLClient(config['mysql']['host'], config['mysql']['port'], config['mysql']['user'],
-                           config['mysql']['password'], config['mysql']['database'])
+milvus_client = MilvusClient(config.Milvus.host, config.Milvus.port)
+milvus_client.create_collection(AUDIO_TABLE)
+mysql_client = MySQLClient(config.MySQL.host, config.MySQL.port, config.MySQL.user,
+                           config.MySQL.password, config.MySQL.database)
 
 # 允许的文件扩展名
-ALLOWED_EXTENSIONS = {'wav'}
-
 paddleASR = SpeechRecognitionAdapter(PaddleSpeechRecognition())
 paddleVector = SpeakerVerificationAdapter(PaddleSpeakerVerification())
-models_path = os.path.abspath(os.path.join('action', 'bert_models'))
+models_path = config.ModelDir
 action_matcher = InstructionMatcher(models_path).load(MicomlMatcher('paraphrase-multilingual-MiniLM-L12-v2'))
-
-
-# action_matcher = InstructionMatcher(models_path).load(GoogleMatcher('google-bert-base-chinese'))
-
-def pre_process(audio_file):
-    audio = AudioSegment.from_wav(audio_file)
-    samples = np.array(audio.get_array_of_samples())
-
-    # 获取音频文件的采样率
-    rate, data = wavfile.read(audio_file)
-
-    # 使用noisereduce库进行降噪
-    reduced_noise = nr.reduce_noise(y=samples, sr=rate)
-
-    # 将降噪后的数据转换回AudioSegment
-    reduced_noise_audio = AudioSegment(
-        reduced_noise.tobytes(),
-        frame_rate=audio.frame_rate,
-        sample_width=audio.sample_width,
-        channels=audio.channels
-    )
-    # # 降低采样率到16000 Hz
-    # reduced_noise_audio = reduced_noise_audio.set_frame_rate(16000)
-
-    output_dir = "./processed"
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-    # 保存降噪和降采样后的音频文件
-    filename = os.path.basename(audio_file)
-    output_file = os.path.join(output_dir, filename)
-    reduced_noise_audio.export(output_file, format="wav")
-
-    return output_file
 
 
 @app.route('/load', methods=['PUT'])
@@ -121,31 +56,23 @@ def load():
         average_emb = np.mean(audio_embs_array, axis=0)
 
         # 将特征向量插入 Milvus 并获取 ID
-        milvus_ids = milvus_client.insert(table_name, [average_emb.tolist()])
-        milvus_client.create_index(table_name)
+        milvus_ids = milvus_client.insert(AUDIO_TABLE, [average_emb.tolist()])
+        milvus_client.create_index(AUDIO_TABLE)
 
         # 将 ID 和音频信息存储到 MySQL
         username = request.form.get('username')
         permission_level = int(request.form.get('permission_level'))
-        mysql_client.create_mysql_table(user_table)
-        user_id = mysql_client.load_data_to_mysql(user_table, [(username, milvus_ids[0], permission_level)])
+        mysql_client.create_mysql_table(USER_TABLE)
+        user_id = mysql_client.load_data_to_mysql(USER_TABLE, [(username, milvus_ids[0], permission_level)])
 
-        response = {
-            'result': SUCCESS,
-            'data': {
-                'user_id': user_id,
-                'voiceprint': milvus_ids[0],
-                'permission_level': permission_level
-            }
-        }
+        response = qr.data(
+            user_id=user_id,
+            voiceprint=milvus_ids[0],
+            permission_level=permission_level
+        )
     except Exception as e:
         traceback.print_exc()
-        response = {
-            'result': FAILED,
-            'data': {
-                'error': type(e).__name__
-            }
-        }
+        response = qr.error(e)
     finally:
         for file_path in file_paths:
             os.remove(file_path)
@@ -169,36 +96,28 @@ def delete_user():
 
     # 从MySQL中删除指令
     voiceprint_id = mysql_client.get_voiceprint_by_id(user_id)
-    milvus_client.delete_by_id(table_name, voiceprint_id)
+    milvus_client.delete_by_id(AUDIO_TABLE, voiceprint_id)
     mysql_client.delete_user(user_id)
 
-    return jsonify({'result': SUCCESS})
+    return jsonify(qr.success())
 
 
 @app.route('/get_all_user', methods=['GET'])
 def get_all_user():
     user_set = mysql_client.get_all_users()
-
-    response = {
-        'result': SUCCESS,
-        'data': {
-            "user_set": user_set
-        }
-    }
+    response = qr.data(user_set=user_set)
     return jsonify(response)
 
 
 @app.route('/delete_all_user', methods=['GET'])
 def delete_all_user():
-    result = FAILED
     try:
         mysql_client.delete_all_users()
-        milvus_client.delete_all(table_name)
-        result = SUCCESS
+        milvus_client.delete_all(AUDIO_TABLE)
+        return jsonify(qr.success())
     except Exception as e:
         traceback.print_exc()
-    finally:
-        return jsonify({"result": result})
+        return jsonify(qr.error(e))
 
 
 @app.route('/update_user', methods=['POST'])
@@ -207,9 +126,9 @@ def update_user():
     permission_level = int(request.form.get('permission_level'))
     user_id = int(request.form.get('id'))
 
-    mysql_client.update_user_info(user_table, user_id, username, permission_level)
+    mysql_client.update_user_info(USER_TABLE, user_id, username, permission_level)
 
-    return jsonify({'result': SUCCESS})
+    return jsonify(qr.success())
 
 
 @app.route('/asr', methods=['POST'])
@@ -223,27 +142,12 @@ def asr():
     try:
         text = paddleASR.recognize(file_path)
         if text:
-            response = {
-                'result': SUCCESS,
-                'data': {
-                    'text': text
-                }
-            }
+            response = qr.data(text=text)
         else:
-            response = {
-                'result': FAILED,
-                'data': {
-                    'error': 'Text not recognized'
-                }
-            }
+            response = qr.error("Text not recognized")
     except Exception as e:
         traceback.print_exc()
-        response = {
-            'result': FAILED,
-            'data': {
-                'error': type(e).__name__
-            }
-        }
+        response = qr.error(e)
     finally:
         os.remove(file_path)
 
@@ -267,7 +171,7 @@ def recognize():
         audio_embedding = paddleVector.get_embedding(pro_path)
 
         # 在 Milvus 中搜索相似音频
-        search_results = milvus_client.search(audio_embedding, table_name, 1)
+        search_results = milvus_client.search(audio_embedding, AUDIO_TABLE, 1)
         user_name = 'None'
         similar_distance = '0'
         similarity_score = '0'
@@ -289,27 +193,20 @@ def recognize():
                 recognize_result = SUCCESS
                 asr_result = paddleASR.recognize(file_path)
 
-
         # 构建响应
-        response = {
-            'result': recognize_result,
-            'data': {
-                'username': user_name,
-                'user_id': user_id,
-                'similar_distance': similar_distance,
-                'similarity_score': similarity_score,
-                'asr_result': asr_result,
-                'possible_action': do_search_action(asr_result)[1]
-            }
-        }
+
+        response = qr.result(
+            recognize_result,
+            username=user_name,
+            user_id=user_id,
+            similar_distance=similar_distance,
+            similarity_score=similarity_score,
+            asr_result=asr_result,
+            possible_action=do_search_action(asr_result)[1]
+        )
     except Exception as e:
         traceback.print_exc()
-        response = {
-            'result': FAILED,
-            'data': {
-                'error': type(e).__name__
-            }
-        }
+        response = qr.error(e)
     finally:
         # 删除临时文件
         os.remove(file_path)
@@ -337,7 +234,7 @@ def add_action():
     # 将指令插入到MySQL
     mysql_client.insert_action(action)
 
-    return jsonify({'result': SUCCESS})
+    return jsonify(qr.success())
 
 
 @app.route('/delete_action', methods=['POST'])
@@ -357,7 +254,7 @@ def delete_action():
     # 从MySQL中删除指令
     mysql_client.delete_action(action)
 
-    return jsonify({'result': SUCCESS})
+    return jsonify(qr.success())
 
 
 @app.route('/search_action', methods=['GET'])
@@ -374,14 +271,11 @@ def search_action():
         flash('No action provided')
         return redirect(request.url)
     action_id, best_match, similarity_score = do_search_action(action)
-    response = {
-        'result': SUCCESS,
-        'data': {
-            "action_id": action_id,
-            'best_match_action': best_match,
-            'similarity_percent': f'{similarity_score * 100:.1f}'
-        }
-    }
+    response = qr.data(
+        action_id=action_id,
+        best_match_action=best_match,
+        similarity_percent=f'{similarity_score * 100:.1f}'
+    )
     return jsonify(response)
 
 
@@ -394,15 +288,10 @@ def do_search_action(action):
 
 @app.route('/get_all_action', methods=['GET'])
 def get_all_action():
-    milvus_client.query_all(table_name)
+    milvus_client.query_all(AUDIO_TABLE)
     action_set = mysql_client.get_all_actions()
 
-    response = {
-        'result': SUCCESS,
-        'data': {
-            "action_set": action_set
-        }
-    }
+    response = qr.data(action_set=action_set)
     return jsonify(response)
 
 
