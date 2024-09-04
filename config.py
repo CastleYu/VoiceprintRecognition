@@ -1,6 +1,9 @@
 import os
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = 'uploads'
+AUDIO_TABLE = 'audio'
+USER_TABLE = 'user'
 
 
 class Milvus:
@@ -20,4 +23,15 @@ class Algorithm:
     threshold = 0.8
 
 
-ModelDir = os.path.abspath(os.path.join('action', 'bert_models'))
+class Model:
+    ModelDir = os.path.abspath(os.path.join(ROOT_DIR, 'action', 'bert_models'))
+    ModelBinMap = {
+        "google-bert-base-chinese": ["pytorch_model.bin"],
+        "paraphrase-multilingual-MiniLM-L12-v2": ["0_Transformer", "pytorch_model.bin"]
+    }
+
+
+class Update:
+    ModelDir = Model.ModelDir
+    API = 'https://api.github.com/repos/CastleYu/VoiceprintRecognition/releases'
+    RESOURCES_KEYWORD = 'resources'

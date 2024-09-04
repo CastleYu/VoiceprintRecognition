@@ -4,17 +4,18 @@ import traceback
 import numpy as np
 from flask import Flask, request, redirect, flash, jsonify
 from flask_cors import CORS
-from utils.responseU import QuickResponse as qr
 
 import config
 from action.action_matcher import *
 from audio.asr import PaddleSpeechRecognition, SpeechRecognitionAdapter
 from audio.vector import PaddleSpeakerVerification, SpeakerVerificationAdapter
-from const import AUDIO_TABLE, USER_TABLE, SUCCESS, FAILED
+from config import AUDIO_TABLE, USER_TABLE, UPLOAD_FOLDER
+from const import SUCCESS, FAILED
 from dao.milvus_dao import MilvusClient
 from dao.mysql_dao import MySQLClient
 from utils.audioU import pre_process
 from utils.fileU import check_file_in_request, save_file
+from utils.responseU import QuickResponse as qr
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # 用于闪现消息
@@ -30,7 +31,7 @@ mysql_client = MySQLClient(config.MySQL.host, config.MySQL.port, config.MySQL.us
 # 允许的文件扩展名
 paddleASR = SpeechRecognitionAdapter(PaddleSpeechRecognition())
 paddleVector = SpeakerVerificationAdapter(PaddleSpeakerVerification())
-models_path = config.ModelDir
+models_path = config.Update.ModelDir
 action_matcher = InstructionMatcher(models_path).load(MicomlMatcher('paraphrase-multilingual-MiniLM-L12-v2'))
 
 
@@ -43,7 +44,7 @@ def load():
 
     file_paths = []
     for file in files:
-        file_path = save_file(file, app.config['UPLOAD_FOLDER'])
+        file_path = save_file(file, UPLOAD_FOLDER)
         file_paths.append(file_path)
 
     try:
@@ -138,7 +139,7 @@ def asr():
         flash(message)
         return redirect(request.url)
 
-    file_path = save_file(file, app.config['UPLOAD_FOLDER'])
+    file_path = save_file(file, UPLOAD_FOLDER)
     try:
         text = paddleASR.recognize(file_path)
         if text:
@@ -163,7 +164,7 @@ def recognize():
         return redirect(request.url)
 
     # 保存文件到指定路径
-    file_path = save_file(files[0], app.config['UPLOAD_FOLDER'])
+    file_path = save_file(files[0], UPLOAD_FOLDER)
 
     try:
         pro_path = pre_process(file_path)
