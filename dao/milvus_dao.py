@@ -4,7 +4,10 @@ from pymilvus import Collection, CollectionSchema, FieldSchema, DataType, connec
 class MilvusClient:
     def __init__(self, host, port):
         connections.connect(alias='default', host=host, port=port)
-
+        self.fields = [
+            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),  # 主键s
+            FieldSchema(name="vec", dtype=DataType.FLOAT_VECTOR, dim=192)
+        ]
 
     def create_collection(self, table_name):
         # 检查集合是否已经存在
@@ -14,11 +17,8 @@ class MilvusClient:
             return collection
 
         # 定义集合的 schema
-        fields = [
-            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),  # 主键s
-            FieldSchema(name="vec", dtype=DataType.FLOAT_VECTOR, dim=192)
-        ]
-        schema = CollectionSchema(fields, description="audio collection")
+
+        schema = CollectionSchema(self.fields, description="audio collection")
 
         # 创建集合
         collection = Collection(name=table_name, schema=schema)
