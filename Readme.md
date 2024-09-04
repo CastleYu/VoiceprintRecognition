@@ -42,15 +42,12 @@ conda create --name speech python=3.8
   pip install pytest-runner
   pip install paddlespeech==1.4.1 -i https://pypi.tuna.tsinghua.edu.cn/simple
   pip install librosa==0.10.1
-  pip install pymilvus
-  pip install pymysql
+  pip install pymilvus pymysql
   pip install transformers
   pip install sentence_transformers
   pip install LAC
-  pip install pydub
   pip install noisereduce
-  pip install flask_cors
-  pip install sqlalchemy
+  pip install pydub flask_cors sqlalchemy
   ```
 - **简化安装**: 理论上，以下三行命令可以顺序执行完成所有依赖库的安装：
 
