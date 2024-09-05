@@ -21,18 +21,18 @@ app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # 用于闪现消息
 CORS(app)
 
-accuracy_threshold = config.Algorithm.threshold
+ACCURACY_THRESHOLD = config.Algorithm.threshold
+MODELS_DIR = config.Update.ModelDir
 
 milvus_client = MilvusClient(config.Milvus.host, config.Milvus.port)
 milvus_client.create_collection(AUDIO_TABLE)
 mysql_client = MySQLClient(config.MySQL.host, config.MySQL.port, config.MySQL.user,
                            config.MySQL.password, config.MySQL.database)
 
-# 允许的文件扩展名
 paddleASR = SpeechRecognitionAdapter(PaddleSpeechRecognition())
 paddleVector = SpeakerVerificationAdapter(PaddleSpeakerVerification())
-models_path = config.Update.ModelDir
-action_matcher = InstructionMatcher(models_path).load(MicomlMatcher('paraphrase-multilingual-MiniLM-L12-v2'))
+
+action_matcher = InstructionMatcher(MODELS_DIR).load(MicomlMatcher('paraphrase-multilingual-MiniLM-L12-v2'))
 
 
 def do_search_action(action):
@@ -196,7 +196,7 @@ def recognize():
             similarity_score = paddleVector.get_embeddings_score(similar_vector, audio_embedding)
 
             # 根据相似度评分确定识别结果
-            if similarity_score >= accuracy_threshold:
+            if similarity_score >= ACCURACY_THRESHOLD:
                 recognize_result = SUCCESS
                 asr_result = paddleASR.recognize(file_path)
 
