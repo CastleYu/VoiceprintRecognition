@@ -1,0 +1,11 @@
+paddlespeech==1.4.1
+pytest-runner
+pymilvus
+pymysql
+transformers
+sentence_transformers
+LAC
+pydub
+noisereduce
+flask_cors
+sqlalchemy

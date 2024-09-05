@@ -35,6 +35,12 @@ models_path = config.Update.ModelDir
 action_matcher = InstructionMatcher(models_path).load(MicomlMatcher('paraphrase-multilingual-MiniLM-L12-v2'))
 
 
+def do_search_action(action):
+    action_set = mysql_client.get_all_actions()
+    best_match, similarity_score = action_matcher.match(action, action_set)
+    action_id = mysql_client.get_action_id(best_match)
+    return action_id, best_match, similarity_score
+
 @app.route('/load', methods=['PUT'])
 def load():
     is_valid, message, files = check_file_in_request(request)
@@ -279,12 +285,6 @@ def search_action():
     )
     return jsonify(response)
 
-
-def do_search_action(action):
-    action_set = mysql_client.get_all_actions()
-    best_match, similarity_score = action_matcher.match(action, action_set)
-    action_id = mysql_client.get_action_id(best_match)
-    return action_id, best_match, similarity_score
 
 
 @app.route('/get_all_action', methods=['GET'])
