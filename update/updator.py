@@ -1,10 +1,5 @@
 import os
 import traceback
-import zipfile
-from urllib.request import getproxies
-
-import requests
-from tqdm import tqdm
 
 import config
 
@@ -16,6 +11,7 @@ wanted_resources = []
 
 
 def get_system_proxies():
+    from urllib.request import getproxies
     proxies = getproxies()
     proxies['https'] = proxies['http']
     proxies.pop('ftp')
@@ -26,6 +22,7 @@ def update_resources():
     if check_resources():
         print('Everything is up to date')
         return
+    import requests
     response = requests.get(API, proxies=get_system_proxies())
     response.raise_for_status()
     data = response.json()
@@ -47,10 +44,12 @@ def check_resources():
         path = os.path.join(config.Model.ModelDir, k, *v)
         if not os.path.exists(path):
             wanted_resources.append(k + '.zip')
-    return not wanted_resources # empty is True -> no needs update
+    return not wanted_resources  # empty is True -> no needs update
 
 
 def download_resources(assets_list):
+    import requests
+    from tqdm import tqdm
     for asset in assets_list:
         if asset['name'] in wanted_resources:
             try:
@@ -85,6 +84,7 @@ def download_resources(assets_list):
 
 
 def unzip(file_name=None):
+    import zipfile
     root = RESOURCES_DIR
     if not os.path.isabs(root):
         root = os.path.abspath(root)
