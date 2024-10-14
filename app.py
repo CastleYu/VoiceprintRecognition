@@ -16,6 +16,7 @@ from dao.mysql_dao import MySQLClient
 from utils.audioU import pre_process
 from utils.fileU import check_file_in_request, save_file
 from utils.responseU import QuickResponse as qr
+import csv
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # 用于闪现消息
@@ -43,15 +44,32 @@ def do_search_action(action):
 
 @app.route('/load', methods=['PUT'])
 def load():
+    # 硬编码 CSV 文件路径
+    CSV_FILE_PATH = '/path/to/your/file.csv'
+
+    file_paths = []
+    usernames = []
+    permission_levels = []
+
+    # 从请求中获取文件信息
     is_valid, message, files = check_file_in_request(request)
-    if not is_valid:
+    if is_valid:
+        for file in files:
+            file_path = save_file(file, UPLOAD_FOLDER)
+            file_paths.append(file_path)
+            usernames.append(request.form.get('username'))
+            permission_levels.append(int(request.form.get('permission_level')))
+    else:
         flash(message)
         return redirect(request.url)
 
-    file_paths = []
-    for file in files:
-        file_path = save_file(file, UPLOAD_FOLDER)
-        file_paths.append(file_path)
+    # 从 CSV 文件中读取数据
+    with open(CSV_FILE_PATH, 'r') as csv_file:
+        csv_reader = csv.reader(csv_file)
+        for row in csv_reader:
+            file_paths.append(row[0])  # 音频文件的本地位置
+            usernames.append(row[1])  # username
+            permission_levels.append(int(row[2]))  # permission_level
 
     try:
         audio_embs = []
@@ -67,24 +85,69 @@ def load():
         milvus_client.create_index(AUDIO_TABLE)
 
         # 将 ID 和音频信息存储到 MySQL
-        username = request.form.get('username')
-        permission_level = int(request.form.get('permission_level'))
         mysql_client.create_mysql_table(USER_TABLE)
-        user_id = mysql_client.load_data_to_mysql(USER_TABLE, [(username, milvus_ids[0], permission_level)])
+        for i, milvus_id in enumerate(milvus_ids):
+            user_id = mysql_client.load_data_to_mysql(USER_TABLE, [(usernames[i], milvus_id, permission_levels[i])])
 
         response = qr.data(
             user_id=user_id,
             voiceprint=milvus_ids[0],
-            permission_level=permission_level
+            permission_level=permission_levels[0]
         )
     except Exception as e:
         traceback.print_exc()
         response = qr.error(e)
     finally:
         for file_path in file_paths:
-            os.remove(file_path)
+            if os.path.exists(file_path):
+                os.remove(file_path)
 
     return jsonify(response)
+
+# @app.route('/load', methods=['PUT'])
+# def load():
+#     is_valid, message, files = check_file_in_request(request)
+#     if not is_valid:
+#         flash(message)
+#         return redirect(request.url)
+
+#     file_paths = []
+#     for file in files:
+#         file_path = save_file(file, UPLOAD_FOLDER)
+#         file_paths.append(file_path)
+
+#     try:
+#         audio_embs = []
+#         for file_path in file_paths:
+#             pro_path = pre_process(file_path)
+#             audio_emb = paddleVector.get_embedding(pro_path)
+#             audio_embs.append(audio_emb)
+#         audio_embs_array = np.array(audio_embs)
+#         average_emb = np.mean(audio_embs_array, axis=0)
+
+#         # 将特征向量插入 Milvus 并获取 ID
+#         milvus_ids = milvus_client.insert(AUDIO_TABLE, [average_emb.tolist()])
+#         milvus_client.create_index(AUDIO_TABLE)
+
+#         # 将 ID 和音频信息存储到 MySQL
+#         username = request.form.get('username')
+#         permission_level = int(request.form.get('permission_level'))
+#         mysql_client.create_mysql_table(USER_TABLE)
+#         user_id = mysql_client.load_data_to_mysql(USER_TABLE, [(username, milvus_ids[0], permission_level)])
+
+#         response = qr.data(
+#             user_id=user_id,
+#             voiceprint=milvus_ids[0],
+#             permission_level=permission_level
+#         )
+#     except Exception as e:
+#         traceback.print_exc()
+#         response = qr.error(e)
+#     finally:
+#         for file_path in file_paths:
+#             os.remove(file_path)
+
+#     return jsonify(response)
 
 
 @app.route('/delete_user', methods=['POST'])
@@ -210,6 +273,62 @@ def recognize():
             similarity_score=similarity_score,
             asr_result=asr_result,
             possible_action=do_search_action(asr_result)[1]
+        )
+    except Exception as e:
+        traceback.print_exc()
+        response = qr.error(e)
+    finally:
+        # 删除临时文件
+        os.remove(file_path)
+
+    return jsonify(response)
+
+
+@app.route('/recognizeAudioPrint', methods=['POST'])
+def recognizeAudioPrint():
+    # 检查请求中的文件是否有效
+    is_valid, message, files = check_file_in_request(request)
+    if not is_valid:
+        flash(message)
+        return redirect(request.url)
+
+    # 保存文件到指定路径
+    file_path = save_file(files[0], UPLOAD_FOLDER)
+
+    try:
+        pro_path = pre_process(file_path)
+        # 获取音频嵌入向量
+        audio_embedding = paddleVector.get_embedding(pro_path)
+
+        # 在 Milvus 中搜索相似音频
+        search_results = milvus_client.search(audio_embedding, AUDIO_TABLE, 1)
+        user_name = 'None'
+        similar_distance = '0'
+        similarity_score = '0'
+        recognize_result = FAILED
+        user_id = '0'
+
+        if search_results:
+            user_id = str(search_results[0][0].id)
+            user_name = mysql_client.find_user_name_by_id(user_id)
+            similar_distance = search_results[0][0].distance
+            similar_vector = np.array(search_results[0][0].entity.vec, dtype=np.float32)
+
+            # 计算相似度评分
+            similarity_score = paddleVector.get_embeddings_score(similar_vector, audio_embedding)
+
+            # 根据相似度评分确定识别结果
+            if similarity_score >= ACCURACY_THRESHOLD:
+                recognize_result = SUCCESS
+
+        # 构建响应
+
+        response = qr.result(
+            recognize_result,
+            username=user_name,
+            user_id=user_id,
+            similar_distance=similar_distance,
+            similarity_score=similarity_score,
         )
     except Exception as e:
         traceback.print_exc()
