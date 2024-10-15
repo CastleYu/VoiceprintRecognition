@@ -20,7 +20,7 @@ class MySQL:
 
 
 class Algorithm:
-    threshold = 0.8
+    threshold = 0.75111
 
 
 class Model:

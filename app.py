@@ -1,8 +1,9 @@
+from decimal import Decimal
 import os.path
 import traceback
 
 import numpy as np
-from flask import Flask, request, redirect, flash, jsonify
+from flask import Flask, logging, request, redirect, flash, jsonify
 from flask_cors import CORS
 
 import config
@@ -17,12 +18,13 @@ from utils.audioU import pre_process
 from utils.fileU import check_file_in_request, save_file
 from utils.responseU import QuickResponse as qr
 import csv
+from collections import defaultdict
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # 用于闪现消息
 CORS(app)
 
-ACCURACY_THRESHOLD = config.Algorithm.threshold
+ACCURACY_THRESHOLD = config.Algorithm.threshold //0.8
 MODELS_DIR = config.Update.ModelDir
 
 milvus_client = MilvusClient(config.Milvus.host, config.Milvus.port)
@@ -45,62 +47,62 @@ def do_search_action(action):
 @app.route('/load', methods=['PUT'])
 def load():
     # 硬编码 CSV 文件路径
-    CSV_FILE_PATH = '/path/to/your/file.csv'
+    CSV_FILE_PATH = r'P:\xiangmu\python\Voice\train_files.csv'
 
-    file_paths = []
-    usernames = []
-    permission_levels = []
+    file_data = defaultdict(list)
 
     # 从请求中获取文件信息
     is_valid, message, files = check_file_in_request(request)
-    if is_valid:
-        for file in files:
-            file_path = save_file(file, UPLOAD_FOLDER)
-            file_paths.append(file_path)
-            usernames.append(request.form.get('username'))
-            permission_levels.append(int(request.form.get('permission_level')))
-    else:
-        flash(message)
-        return redirect(request.url)
+    # if is_valid:
+    #     for file in files:
+    #         file_path = save_file(file, UPLOAD_FOLDER)
+    #         username = request.form.get('username')
+    #         permission_level = int(request.form.get('permission_level'))
+    #         file_data[(username, permission_level)].append(file_path)
+    # else:
+    #     flash(message)
+    #     return redirect(request.url)
 
     # 从 CSV 文件中读取数据
     with open(CSV_FILE_PATH, 'r') as csv_file:
         csv_reader = csv.reader(csv_file)
+        next(csv_reader)
         for row in csv_reader:
-            file_paths.append(row[0])  # 音频文件的本地位置
-            usernames.append(row[1])  # username
-            permission_levels.append(int(row[2]))  # permission_level
+            file_path = row[0]  # 音频文件的本地位置
+            username = row[1]  # username
+            permission_level = int(row[2])  # permission_level
+            file_data[(username, permission_level)].append(file_path)
 
     try:
-        audio_embs = []
-        for file_path in file_paths:
-            pro_path = pre_process(file_path)
-            audio_emb = paddleVector.get_embedding(pro_path)
-            audio_embs.append(audio_emb)
-        audio_embs_array = np.array(audio_embs)
-        average_emb = np.mean(audio_embs_array, axis=0)
+        for (username, permission_level), file_paths in file_data.items():
+            audio_embs = []
+            for file_path in file_paths:
+                pro_path = pre_process(file_path)
+                audio_emb = paddleVector.get_embedding(pro_path)
+                audio_embs.append(audio_emb)
+            audio_embs_array = np.array(audio_embs)
+            average_emb = np.mean(audio_embs_array, axis=0)
 
-        # 将特征向量插入 Milvus 并获取 ID
-        milvus_ids = milvus_client.insert(AUDIO_TABLE, [average_emb.tolist()])
-        milvus_client.create_index(AUDIO_TABLE)
+            # 将特征向量插入 Milvus 并获取 ID
+            milvus_ids = milvus_client.insert(AUDIO_TABLE, [average_emb.tolist()])
+            milvus_client.create_index(AUDIO_TABLE)
 
-        # 将 ID 和音频信息存储到 MySQL
-        mysql_client.create_mysql_table(USER_TABLE)
-        for i, milvus_id in enumerate(milvus_ids):
-            user_id = mysql_client.load_data_to_mysql(USER_TABLE, [(usernames[i], milvus_id, permission_levels[i])])
+            # 将 ID 和音频信息存储到 MySQL
+            user_id = mysql_client.load_data_to_mysql(USER_TABLE, [(username, milvus_ids[0], permission_level)])
 
         response = qr.data(
             user_id=user_id,
             voiceprint=milvus_ids[0],
-            permission_level=permission_levels[0]
+            permission_level=permission_level
         )
     except Exception as e:
         traceback.print_exc()
         response = qr.error(e)
     finally:
-        for file_path in file_paths:
-            if os.path.exists(file_path):
-                os.remove(file_path)
+        for file_paths in file_data.values():
+            for file_path in file_paths:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
 
     return jsonify(response)
 
@@ -262,7 +264,6 @@ def recognize():
             if similarity_score >= ACCURACY_THRESHOLD:
                 recognize_result = SUCCESS
                 asr_result = paddleASR.recognize(file_path)
-
         # 构建响应
 
         response = qr.result(
@@ -283,59 +284,73 @@ def recognize():
 
     return jsonify(response)
 
+def float_compare(a, b, precision=1e-9):
+    return abs(a - b) < precision
 
 @app.route('/recognizeAudioPrint', methods=['POST'])
 def recognizeAudioPrint():
+    # 配置化 CSV 文件路径
+    CSV_FILE_PATH = r'P:\xiangmu\python\Voice\test_files.csv'
+
+    file_data = []
     # 检查请求中的文件是否有效
     is_valid, message, files = check_file_in_request(request)
-    if not is_valid:
-        flash(message)
-        return redirect(request.url)
+    # if not is_valid:
+    #     flash(message)
+    #     return redirect(request.url)
 
-    # 保存文件到指定路径
-    file_path = save_file(files[0], UPLOAD_FOLDER)
+    # # 保存文件到指定路径
+    # file_path = save_file(files[0], UPLOAD_FOLDER)
+
+    with open(CSV_FILE_PATH, 'r') as csv_file:
+        csv_reader = csv.reader(csv_file)
+        next(csv_reader)
+        for row in csv_reader:
+            file_data.append(row[0])  # 音频文件的本地位置
+
+    file = open(r'P:\xiangmu\python\Voice\result.csv', 'w', newline='')
 
     try:
-        pro_path = pre_process(file_path)
-        # 获取音频嵌入向量
-        audio_embedding = paddleVector.get_embedding(pro_path)
+        for file_path in file_data:
+            pro_path = pre_process(file_path)
+            audio_embedding = paddleVector.get_embedding(pro_path)
+            search_results = milvus_client.search(audio_embedding, AUDIO_TABLE, 1)
 
-        # 在 Milvus 中搜索相似音频
-        search_results = milvus_client.search(audio_embedding, AUDIO_TABLE, 1)
-        user_name = 'None'
-        similar_distance = '0'
-        similarity_score = '0'
-        recognize_result = FAILED
-        user_id = '0'
+            if search_results:
+                user_id = str(search_results[0][0].id)
+                user_name = str(mysql_client.find_user_name_by_id(user_id))
+                similar_distance = search_results[0][0].distance
+                similar_vector = np.array(search_results[0][0].entity.vec, dtype=np.float32)
+                similarity_score = paddleVector.get_embeddings_score(similar_vector, audio_embedding)
+                # print(f"File name: {file_path}, User ID: {user_id}, User Name: {user_name}, Similarity Score: {similarity_score}")
+                if round(similarity_score,4) < round(ACCURACY_THRESHOLD,4):
+                    recognize_result = FAILED
+                    error_message = "相似度不足"
+                else:
+                    recognize_result = SUCCESS
+                #创建一个csv写入器对象
+                csv_writer = csv.writer(file)
+                csv_writer.writerow([file_path, user_id, user_name, similar_distance, similarity_score, recognize_result])
+                response = qr.result(
+                    recognize_result,
+                    user_name=user_name,
+                    user_id=user_id,
+                    similar_distance=similar_distance,
+                    similarity_score=similarity_score,
+                    error=error_message if recognize_result == FAILED else None
+                )
 
-        if search_results:
-            user_id = str(search_results[0][0].id)
-            user_name = mysql_client.find_user_name_by_id(user_id)
-            similar_distance = search_results[0][0].distance
-            similar_vector = np.array(search_results[0][0].entity.vec, dtype=np.float32)
 
-            # 计算相似度评分
-            similarity_score = paddleVector.get_embeddings_score(similar_vector, audio_embedding)
 
-            # 根据相似度评分确定识别结果
-            if similarity_score >= ACCURACY_THRESHOLD:
-                recognize_result = SUCCESS
+            else:
+                response = qr.error("未找到相似音频")
 
-        # 构建响应
 
-        response = qr.result(
-            recognize_result,
-            username=user_name,
-            user_id=user_id,
-            similar_distance=similar_distance,
-            similarity_score=similarity_score,
-        )
     except Exception as e:
         traceback.print_exc()
         response = qr.error(e)
-    finally:
-        # 删除临时文件
-        os.remove(file_path)
+        # 记录详细的错误日志
+        logging.error(f"Error in recognizeAudioPrint: {e}")
 
     return jsonify(response)
 
