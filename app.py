@@ -189,6 +189,7 @@ def recognize():
         if search_results:
             user_id = str(search_results[0][0].id)
             user_name = mysql_client.find_user_name_by_id(user_id)
+            permission_level = mysql_client.find_permission_level_by_id(user_id)
             similar_distance = search_results[0][0].distance
             similar_vector = np.array(search_results[0][0].entity.vec, dtype=np.float32)
 
@@ -199,18 +200,31 @@ def recognize():
             if similarity_score >= ACCURACY_THRESHOLD:
                 recognize_result = SUCCESS
                 asr_result = paddleASR.recognize(file_path)
-
+                response = qr.result(
+                    recognize_result,
+                    username=user_name,
+                    user_id=user_id,
+                    permission_level=permission_level,
+                    similar_distance=similar_distance,
+                    similarity_score=similarity_score,
+                    asr_result=asr_result,
+                    possible_action=do_search_action(asr_result)[1]
+                    )
+            else:
+                response = qr.result(
+                    recognize_result,
+                    username=user_name,
+                    user_id=user_id,
+                    permission_level=permission_level,
+                    similar_distance=similar_distance,
+                    similarity_score=similarity_score,
+                    error='相似度不够'
+                    )
+        else:
+            response = qr.error('未找到近似声纹')
         # 构建响应
 
-        response = qr.result(
-            recognize_result,
-            username=user_name,
-            user_id=user_id,
-            similar_distance=similar_distance,
-            similarity_score=similarity_score,
-            asr_result=asr_result,
-            possible_action=do_search_action(asr_result)[1]
-        )
+
     except Exception as e:
         traceback.print_exc()
         response = qr.error(e)
