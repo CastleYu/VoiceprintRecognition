@@ -143,7 +143,7 @@ class MySQLClient:
         connection = self.engine.connect()
         try:
             result = connection.execute(
-                select(self.user_table.c.permission_level).where(self.user_table.c.voiceprint == query_id)).fetchone()
+                select(self.user_table.c.username).where(self.user_table.c.voiceprint == query_id)).fetchone()
             return result[0] if result else None
         except SQLAlchemyError as e:
             print(f"MYSQL Error occurred: {e} \n occurred in find_permission_level_by_id")
@@ -155,7 +155,7 @@ class MySQLClient:
         connection = self.engine.connect()
         try:
             result = connection.execute(
-                select(self.user_table.c.username).where(self.user_table.c.voiceprint == query_id)).fetchone()
+                select(self.user_table.c.permission_level).where(self.user_table.c.voiceprint == query_id)).fetchone()
             return result[0] if result else None
         except SQLAlchemyError as e:
             print(f"MYSQL Error occurred: {e} \n occurred in find_user_name_by_id")
