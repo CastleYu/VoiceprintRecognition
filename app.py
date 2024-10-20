@@ -47,7 +47,7 @@ def do_search_action(action):
 @app.route('/load', methods=['PUT'])
 def load():
     # 硬编码 CSV 文件路径
-    CSV_FILE_PATH = r'P:\xiangmu\python\Voice\train_files.csv'
+    CSV_FILE_PATH = r'P:\xiangmu\python\Voice\train_.csv'
 
     file_data = defaultdict(list)
 
@@ -98,11 +98,11 @@ def load():
     except Exception as e:
         traceback.print_exc()
         response = qr.error(e)
-    finally:
-        for file_paths in file_data.values():
-            for file_path in file_paths:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
+    # finally:
+    #     for file_paths in file_data.values():
+    #         for file_path in file_paths:
+    #             if os.path.exists(file_path):
+    #                 os.remove(file_path)
 
     return jsonify(response)
 
@@ -290,7 +290,7 @@ def float_compare(a, b, precision=1e-9):
 @app.route('/recognizeAudioPrint', methods=['POST'])
 def recognizeAudioPrint():
     # 配置化 CSV 文件路径
-    CSV_FILE_PATH = r'P:\xiangmu\python\Voice\test_files.csv'
+    CSV_FILE_PATH = r'P:\xiangmu\python\Voice\test_.csv'
 
     file_data = []
     # 检查请求中的文件是否有效
@@ -308,7 +308,7 @@ def recognizeAudioPrint():
         for row in csv_reader:
             file_data.append(row[0])  # 音频文件的本地位置
 
-    file = open(r'P:\xiangmu\python\Voice\result.csv', 'w', newline='')
+    file = open(r'P:\xiangmu\python\Voice\result_.csv', 'w', newline='')
 
     try:
         for file_path in file_data:
