@@ -5,7 +5,7 @@
 .idea/
 deprecated/
 processed/
-**/**test**
+test/build_new_dataset.py
 
 # General Python Project ignore
 # Byte-compiled / optimized / DLL files

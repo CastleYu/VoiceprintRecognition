@@ -41,6 +41,7 @@ def do_search_action(action):
     action_id = mysql_client.get_action_id(best_match)
     return action_id, best_match, similarity_score
 
+
 @app.route('/load', methods=['PUT'])
 def load():
     is_valid, message, files = check_file_in_request(request)
@@ -284,7 +285,6 @@ def search_action():
         similarity_percent=f'{similarity_score * 100:.1f}'
     )
     return jsonify(response)
-
 
 
 @app.route('/get_all_action', methods=['GET'])
