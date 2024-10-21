@@ -319,6 +319,7 @@ def recognizeAudioPrint():
             if search_results:
                 user_id = str(search_results[0][0].id)
                 user_name = str(mysql_client.find_user_name_by_id(user_id))
+                permission_level = str(mysql_client.find_permission_level_by_id(user_id))
                 similar_distance = search_results[0][0].distance
                 similar_vector = np.array(search_results[0][0].entity.vec, dtype=np.float32)
                 similarity_score = paddleVector.get_embeddings_score(similar_vector, audio_embedding)
@@ -335,13 +336,11 @@ def recognizeAudioPrint():
                     recognize_result,
                     user_name=user_name,
                     user_id=user_id,
+                    permission_level=permission_level,
                     similar_distance=similar_distance,
                     similarity_score=similarity_score,
                     error=error_message if recognize_result == FAILED else None
                 )
-
-
-
             else:
                 response = qr.error("未找到相似音频")
 

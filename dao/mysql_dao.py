@@ -151,6 +151,18 @@ class MySQLClient:
         finally:
             connection.close()
 
+    def find_permission_level_by_id(self, query_id):
+        connection = self.engine.connect()
+        try:
+            result = connection.execute(
+                select(self.user_table.c.permission_level).where(self.user_table.c.voiceprint == query_id)).fetchone()
+            return result[0] if result else None
+        except SQLAlchemyError as e:
+            print(f"MYSQL Error occurred: {e} \n occurred in find_permission_level_by_id")
+            return None
+        finally:
+            connection.close()
+
     def update_user_info(self, table_name, user_id, username=None, permission_level=None):
         if table_name == 'user':
             table = self.user_table
