@@ -161,9 +161,10 @@ def asr():
     return jsonify(response)
 
 
-@app.route('/recognize', methods=['POST'])
+# @app.route('/recognize', methods=['POST'])
+@app.route('/recognizeAudioPrint', methods=['POST'])
 def recognize():
-    # 检查请求中的文件是否有效
+    # 检查请求中的文件是否有效 recognizeAudioPrint
     is_valid, message, files = check_file_in_request(request)
     if not is_valid:
         flash(message)
@@ -197,6 +198,7 @@ def recognize():
             similarity_score = paddleVector.get_embeddings_score(similar_vector, audio_embedding)
 
             # 根据相似度评分确定识别结果
+            print(f'{similarity_score} > {ACCURACY_THRESHOLD} = {similarity_score >= ACCURACY_THRESHOLD}')
             if similarity_score >= ACCURACY_THRESHOLD:
                 recognize_result = SUCCESS
                 asr_result = paddleASR.recognize(file_path)
@@ -207,8 +209,8 @@ def recognize():
                     permission_level=permission_level,
                     similar_distance=similar_distance,
                     similarity_score=similarity_score,
-                    asr_result=asr_result,
-                    possible_action=do_search_action(asr_result)[1]
+                    # asr_result=asr_result,
+                    # possible_action=do_search_action(asr_result)[1]
                     )
             else:
                 response = qr.result(
