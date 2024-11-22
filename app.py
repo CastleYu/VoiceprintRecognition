@@ -24,7 +24,8 @@ app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # 用于闪现消息
 CORS(app)
 
-ACCURACY_THRESHOLD = config.Algorithm.threshold //0.8
+ACCURACY_THRESHOLD = config.Algorithm.threshold #0.8
+# ACCURACY_THRESHOLD = 0.8
 MODELS_DIR = config.Update.ModelDir
 
 milvus_client = MilvusClient(config.Milvus.host, config.Milvus.port)
