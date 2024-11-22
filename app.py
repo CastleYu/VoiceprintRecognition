@@ -47,7 +47,7 @@ def do_search_action(action):
 @app.route('/load', methods=['PUT'])
 def load():
     # 硬编码 CSV 文件路径
-    CSV_FILE_PATH = r'P:\xiangmu\python\Voice\train_.csv'
+    CSV_FILE_PATH = r'P:\xiangmu\python\Voice\train_001.csv'
 
     file_data = defaultdict(list)
 
@@ -290,7 +290,7 @@ def float_compare(a, b, precision=1e-9):
 @app.route('/recognizeAudioPrint', methods=['POST'])
 def recognizeAudioPrint():
     # 配置化 CSV 文件路径
-    CSV_FILE_PATH = r'P:\xiangmu\python\Voice\test_.csv'
+    CSV_FILE_PATH = r'P:\xiangmu\python\Voice\test_001.csv'
 
     file_data = []
     # 检查请求中的文件是否有效
@@ -308,7 +308,7 @@ def recognizeAudioPrint():
         for row in csv_reader:
             file_data.append(row[0])  # 音频文件的本地位置
 
-    file = open(r'P:\xiangmu\python\Voice\result_.csv', 'w', newline='')
+    file = open(r'P:\xiangmu\python\Voice\result_001.csv', 'w', newline='')
 
     try:
         for file_path in file_data:
@@ -324,7 +324,8 @@ def recognizeAudioPrint():
                 similar_vector = np.array(search_results[0][0].entity.vec, dtype=np.float32)
                 similarity_score = paddleVector.get_embeddings_score(similar_vector, audio_embedding)
                 # print(f"File name: {file_path}, User ID: {user_id}, User Name: {user_name}, Similarity Score: {similarity_score}")
-                if round(similarity_score,4) < round(ACCURACY_THRESHOLD,4):
+                print(f'{similarity_score} > {ACCURACY_THRESHOLD} = {similarity_score>ACCURACY_THRESHOLD}')
+                if similarity_score < ACCURACY_THRESHOLD:
                     recognize_result = FAILED
                     error_message = "相似度不足"
                 else:
