@@ -23,7 +23,7 @@ def pre_process(audio_file):
         channels=audio.channels
     )
     # # 降低采样率到16000 Hz
-    # reduced_noise_audio = reduced_noise_audio.set_frame_rate(16000)
+    reduced_noise_audio = reduced_noise_audio.set_frame_rate(16000)
 
     output_dir = "./processed"
     if not os.path.exists(output_dir):
