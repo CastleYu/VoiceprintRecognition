@@ -74,6 +74,7 @@ def load():
             permission_level = int(row[2])  # permission_level
             file_data[(username, permission_level)].append(file_path)
 
+
     try:
         for (username, permission_level), file_paths in file_data.items():
             audio_embs = []
@@ -89,6 +90,7 @@ def load():
             milvus_client.create_index(AUDIO_TABLE)
 
             # 将 ID 和音频信息存储到 MySQL
+            mysql_client.create_mysql_table(USER_TABLE)
             user_id = mysql_client.load_data_to_mysql(USER_TABLE, [(username, milvus_ids[0], permission_level)])
 
         response = qr.data(
@@ -324,7 +326,7 @@ def recognizeAudioPrint():
                 similar_distance = search_results[0][0].distance
                 similar_vector = np.array(search_results[0][0].entity.vec, dtype=np.float32)
                 similarity_score = paddleVector.get_embeddings_score(similar_vector, audio_embedding)
-                # print(f"File name: {file_path}, User ID: {user_id}, User Name: {user_name}, Similarity Score: {similarity_score}")
+                print(f"File name: {file_path}, User ID: {user_id}, User Name: {user_name}, Similarity Score: {similarity_score}")
                 print(f'{similarity_score} > {ACCURACY_THRESHOLD} = {similarity_score>ACCURACY_THRESHOLD}')
                 if similarity_score < ACCURACY_THRESHOLD:
                     recognize_result = FAILED
