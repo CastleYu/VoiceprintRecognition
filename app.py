@@ -237,6 +237,46 @@ def recognize():
     return jsonify(response)
 
 
+@app.route('/wake', methods=['POST'])
+def wake():
+    # 检查请求中是否包含文件部分
+    is_valid, message, file = check_file_in_request(request)
+    if not is_valid:
+        flash(message)
+        return redirect(request.url)
+
+    file_path = save_file(file, UPLOAD_FOLDER)
+    wake_text = request.form.get('wake_text')  # 获取传入的验证文本
+
+    try:
+        # 调用recognize()方法识别声纹身份
+        recognize_result = recognize(file_path)
+        if recognize_result == FAILED:
+            response = qr.error("声纹识别失败")
+            return jsonify(response)
+
+        # 调用asr()方法进行语音识别
+        asr_text = asr(file_path)
+        if not asr_text:
+            response = qr.error("语音识别失败")
+            return jsonify(response)
+
+        # 验证识别出的文本是否和传入的验证文本一致
+        if asr_text == wake_text:
+            response = qr.data(text=asr_text, wake_text=wake_text)
+        else:
+            response = qr.error("识别文本与验证文本不一致")
+
+    except Exception as e:
+        traceback.print_exc()
+        response = qr.error(e)
+
+    finally:
+        # 删除临时文件
+        os.remove(file_path)
+
+    return jsonify(response)
+
 @app.route('/add_action', methods=['POST'])
 def add_action():
     # 检查请求中是否包含指令部分
