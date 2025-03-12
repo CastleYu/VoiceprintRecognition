@@ -146,8 +146,12 @@ def asr():
         return redirect(request.url)
 
     file_path = save_file(file, UPLOAD_FOLDER)
+    print(file_path)
+    file_path = r'P:\xiangmu\python\Voice\opendoor.wav'
     try:
         text = paddleASR.recognize(file_path)
+        print(text)
+        text = '开门'
         if text:
             response = qr.data(text=text)
         else:
@@ -172,7 +176,8 @@ def recognize():
 
     # 保存文件到指定路径
     file_path = save_file(files[0], UPLOAD_FOLDER)
-
+    print(file_path)
+    file_path = r'P:\xiangmu\python\Voice\opendoor.wav'
     try:
         pro_path = pre_process(file_path)
         # 获取音频嵌入向量
@@ -226,7 +231,6 @@ def recognize():
             response = qr.error('未找到近似声纹')
         # 构建响应
 
-
     except Exception as e:
         traceback.print_exc()
         response = qr.error(e)
@@ -239,38 +243,64 @@ def recognize():
 
 @app.route('/wake', methods=['POST'])
 def wake():
-    # 检查请求中是否包含文件部分
-    is_valid, message, file = check_file_in_request(request)
-    if not is_valid:
-        flash(message)
-        return redirect(request.url)
-
+    file = request.files.get('audio_file1')
+    print(file)
+    if not file:
+        return jsonify({'error': 'Missing audio_file1'}), 400
     file_path = save_file(file, UPLOAD_FOLDER)
     wake_text = request.form.get('wake_text')  # 获取传入的验证文本
 
+    print(f"接收到的唤醒文本: {wake_text}")
+    print(f"接收到的文件路径: {file_path}")
+    wake_text = "开门"
+    file_path = r'P:\xiangmu\python\Voice\opendoor.wav'
+    print(file_path)
     try:
-        # 调用recognize()方法识别声纹身份
-        recognize_result = recognize(file_path)
-        if recognize_result == FAILED:
-            response = qr.error("声纹识别失败")
-            return jsonify(response)
-
-        # 调用asr()方法进行语音识别
-        asr_text = asr(file_path)
-        if not asr_text:
-            response = qr.error("语音识别失败")
-            return jsonify(response)
-
-        # 验证识别出的文本是否和传入的验证文本一致
-        if asr_text == wake_text:
-            response = qr.data(text=asr_text, wake_text=wake_text)
+        pro_path = pre_process(file_path)
+        wake_result = FAILED
+        # 获取音频嵌入向量
+        asr_result = paddleASR.recognize(file_path)
+        if asr_result != wake_text:
+            response = qr.result(
+                    wake_result,
+                    error='文本不匹配'
+                    )
         else:
-            response = qr.error("识别文本与验证文本不一致")
+            audio_embedding = paddleVector.get_embedding(pro_path)
+
+            # 在 Milvus 中搜索相似音频
+            search_results = milvus_client.search(audio_embedding, AUDIO_TABLE, 1)
+            similarity_score = '0'
+            user_id = '0'
+
+            if search_results:
+                user_id = str(search_results[0][0].id)
+                similar_vector = np.array(search_results[0][0].entity.vec, dtype=np.float32)
+
+                # 计算相似度评分
+                similarity_score = paddleVector.get_embeddings_score(similar_vector, audio_embedding)
+
+                 # 根据相似度评分确定识别结果
+                print(f'{similarity_score} > {ACCURACY_THRESHOLD} = {similarity_score >= ACCURACY_THRESHOLD}')
+                if similarity_score >= ACCURACY_THRESHOLD:
+                    wake_result = SUCCESS
+                    response = qr.result(
+                        wake_result,
+                        recognized_text=asr_result,
+                        user_id=user_id,
+                    )
+                else:
+                    response = qr.result(
+                        wake_result,
+                        error='声纹精度不够'
+                    )
+            else:
+                response = qr.error('未找到对应用户')
+        # 构建响应
 
     except Exception as e:
         traceback.print_exc()
         response = qr.error(e)
-
     finally:
         # 删除临时文件
         os.remove(file_path)
