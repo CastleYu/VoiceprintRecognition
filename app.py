@@ -147,11 +147,11 @@ def asr():
 
     file_path = save_file(file, UPLOAD_FOLDER)
     print(file_path)
-    file_path = r'P:\xiangmu\python\Voice\opendoor.wav'
+    file_path = r'P:\xiangmu\python\Voice\test11.wav'
     try:
         text = paddleASR.recognize(file_path)
         print(text)
-        text = '开门'
+        text = '打开报表'
         if text:
             response = qr.data(text=text)
         else:
@@ -252,8 +252,8 @@ def wake():
 
     print(f"接收到的唤醒文本: {wake_text}")
     print(f"接收到的文件路径: {file_path}")
-    wake_text = "开门"
-    file_path = r'P:\xiangmu\python\Voice\opendoor.wav'
+    wake_text = "打开报表"
+    file_path = r'P:\xiangmu\python\Voice\test11.wav'
     print(file_path)
     try:
         pro_path = pre_process(file_path)
