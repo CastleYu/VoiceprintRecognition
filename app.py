@@ -243,10 +243,10 @@ def recognize():
 
 @app.route('/wake', methods=['POST'])
 def wake():
-    file = request.files.get('audio_file1')
+    file = request.files.get('file')
     print(file)
     if not file:
-        return jsonify({'error': 'Missing audio_file1'}), 400
+        return jsonify({'error': 'Missing file'}), 400
     file_path = save_file(file, UPLOAD_FOLDER)
     wake_text = request.form.get('wake_text')  # 获取传入的验证文本
 
@@ -260,6 +260,7 @@ def wake():
         wake_result = FAILED
         # 获取音频嵌入向量
         asr_result = paddleASR.recognize(file_path)
+        print(asr_result)
         if asr_result != wake_text:
             response = qr.result(
                     wake_result,
@@ -303,7 +304,8 @@ def wake():
         response = qr.error(e)
     finally:
         # 删除临时文件
-        os.remove(file_path)
+        # os.remove(file_path)
+        pass
 
     return jsonify(response)
 
