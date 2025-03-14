@@ -3,10 +3,11 @@
 /exp/
 /uploads/
 .idea/
+ref/
 deprecated/
 processed/
 **/**test**
-
+**/*.safetensors
 # General Python Project ignore
 # Byte-compiled / optimized / DLL files
 __pycache__/

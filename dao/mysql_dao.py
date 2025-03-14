@@ -19,7 +19,10 @@ class MySQLClient:
 
         self.action_table = Table('action', self.metadata,
                                   Column('id', Integer, primary_key=True),
-                                  Column('action', String(255), unique=True))
+                                  Column('action', String(255), unique=True),
+                                  Column('label', String(255), default='LAUNCH', nullable=False),
+                                  Column('slot', String(255)),
+                                  )
 
     def create_mysql_table(self, table_name):
         if table_name == 'user':
@@ -27,7 +30,13 @@ class MySQLClient:
         elif table_name == 'action':
             self.action_table.create(self.engine, checkfirst=True)
 
-    def load_data_to_mysql(self, table_name, data):
+    def load_data_to_mysql(self, table_name, data_list):
+        """
+
+        :param table_name:
+        :param data_list: 一个 （用户名，声纹，权限） 的三元组的列表
+        :return:
+        """
         connection = self.engine.connect()
         if table_name == 'user':
             table = self.user_table
@@ -40,7 +49,7 @@ class MySQLClient:
                     'voiceprint': entry[1],
                     'permission_level': entry[2]
                 }
-                for entry in data
+                for entry in data_list
             ]
             connection.execute(table.insert(), formatted_data)
             connection.commit()
@@ -50,13 +59,11 @@ class MySQLClient:
         finally:
             connection.close()
 
-    def create_action_table(self):
-        self.create_mysql_table('action')
-
     def insert_action(self, action):
         connection = self.engine.connect()
         try:
-            connection.execute(self.action_table.insert(), {'action': action})
+            connection.execute(self.action_table.insert(), {
+                'action': action})
             connection.commit()
         except SQLAlchemyError as e:
             connection.rollback()
@@ -197,5 +204,21 @@ class MySQLClient:
         except SQLAlchemyError as e:
             print(f"MYSQL Error occurred: {e} \n occurred in get_voiceprint_by_id")
             return None
+        finally:
+            connection.close()
+
+    def get_actions_by_label(self, label):
+        connection = self.engine.connect()
+        try:
+            # 修正 select 语法
+            result = connection.execute(
+                select(self.action_table.c.id, self.action_table.c.action)
+                .where(self.action_table.c.label == label)
+            ).fetchall()
+            # 返回 (id, action) 的元组列表
+            return [(row[0], row[1]) for row in result]
+        except SQLAlchemyError as e:
+            print(f"MYSQL Error occurred: {e} \n occurred in get_actions_by_label")
+            return []
         finally:
             connection.close()

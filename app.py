@@ -69,7 +69,6 @@ def load():
         # 将 ID 和音频信息存储到 MySQL
         username = request.form.get('username')
         permission_level = int(request.form.get('permission_level'))
-        mysql_client.create_mysql_table(USER_TABLE)
         user_id = mysql_client.load_data_to_mysql(USER_TABLE, [(username, milvus_ids[0], permission_level)])
 
         response = qr.data(
