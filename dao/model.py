@@ -1,6 +1,7 @@
+from pymilvus import FieldSchema, DataType
 from sqlalchemy import Column, Integer, String
 
-from ._dao import Base
+from ._dao import Base, Schema
 
 
 # ORM 模型定义
@@ -18,3 +19,8 @@ class Command(Base):
     action = Column(String(255), unique=True)
     label = Column(String(255), default='LAUNCH', nullable=False)
     slot = Column(String(255))
+
+
+class VoicePrint(Schema):
+    id = FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True)
+    vec = FieldSchema(name="vec", dtype=DataType.FLOAT_VECTOR, dim=192)

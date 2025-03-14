@@ -1,9 +1,21 @@
 from typing import TypeVar, Type, Generic, Optional, List
 
+from pymilvus import FieldSchema
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import scoped_session, sessionmaker, declarative_base
 from sqlalchemy.pool import QueuePool
+
+
+class Schema:
+
+    @classmethod
+    def get_fields(cls):
+        """
+        遍历类属性，将所有 FieldSchema 实例收集到一个列表中
+        """
+        return [value for key, value in cls.__dict__.items() if isinstance(value, FieldSchema)]
+
 
 Base = declarative_base()
 T = TypeVar('T', bound=Base)
@@ -181,3 +193,107 @@ class MySQLDAO(DAO, Generic[T]):
     def commit(self):
         self.session.commit()
         return self
+
+
+from pymilvus import (
+    connections,
+    FieldSchema,
+    CollectionSchema,
+    DataType,
+    Collection,
+    utility
+)
+
+
+class MilvusDAO:
+    def __init__(self, collection_name: str, dim: int = 192, index_params: dict = None):
+        self.collection_name = collection_name
+        self.dim = dim
+        self.index_params = index_params or {
+            "index_type": "IVF_FLAT",
+            "metric_type": "L2",
+            "params": {
+                "nlist": 128}
+        }
+        self.collection: Collection = None
+
+    def connect(self, host: str, port: int):
+        """连接 Milvus 服务器，并获取或创建集合"""
+        connections.connect(alias='default', host=host, port=port)
+        self.collection = self._create_or_get_collection(self.collection_name)
+        return self
+
+    def _create_or_get_collection(self, name: str) -> Collection:
+        """如果集合存在则加载，不存在则创建集合和索引"""
+        if utility.has_collection(name):
+            collection = Collection(name=name)
+            if not collection.has_index():
+                collection.create_index(field_name="vec", index_params=self.index_params)
+            collection.load()
+        else:
+            fields = [
+                FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
+                FieldSchema(name="vec", dtype=DataType.FLOAT_VECTOR, dim=self.dim)
+            ]
+            schema = CollectionSchema(fields=fields, description="vector collection")
+            collection = Collection(name=name, schema=schema)
+            collection.create_index(field_name="vec", index_params=self.index_params)
+            collection.load()
+        return collection
+
+    def add(self, vectors: list):
+        """
+        插入向量数据
+        :param vectors: 单个向量或向量列表（示例中将数据包装在列表中）
+        :return: 插入数据的主键列表
+        """
+        result = self.collection.insert([vectors])
+        return result.primary_keys
+
+    def search(self, query_vectors: list, top_k: int = 1, nprobe: int = 10):
+        """
+        搜索最相近的向量
+        :param query_vectors: 查询向量
+        :param top_k: 返回最相似的前 k 个结果
+        :param nprobe: 搜索参数 nprobe（影响搜索准确性和速度）
+        :return: 搜索结果列表
+        """
+        search_params = {
+            "metric_type": "L2",
+            "params": {
+                "nprobe": nprobe}}
+        results = self.collection.search(
+            data=[query_vectors],
+            anns_field="vec",
+            param=search_params,
+            limit=top_k,
+            output_fields=['vec']
+        )
+        return results
+
+    def delete_by_id(self, id_to_delete: int) -> bool:
+        """
+        根据主键删除数据
+        :param id_to_delete: 需要删除的 ID
+        :return: 删除是否成功
+        """
+        self.collection.delete(f"id in [{id_to_delete}]")
+        self.collection.compact()
+        result = self.collection.query(f"id in [{id_to_delete}]")
+        return len(result) == 0
+
+    def delete_all(self) -> bool:
+        """
+        删除集合中所有数据
+        :return: 如果全部删除则返回 True，否则抛出异常
+        """
+        self.collection.delete("id >= 0")
+        self.collection.compact()
+        result = self.collection.query("id >= 0")
+        if len(result) != 0:
+            raise RuntimeError("Milvus delete all failed")
+        return True
+
+    def get_all(self):
+        """查询集合中所有数据"""
+        return self.collection.query("id >= 0")
