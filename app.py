@@ -42,23 +42,23 @@ def do_search_action(action):
     return action_id, best_match, similarity_score
 
 @app.route('/load', methods=['PUT'])
-"""
-处理音频文件上传、声纹特征提取和存储的路由处理函数。
+#
+# 处理音频文件上传、声纹特征提取和存储的路由处理函数。
 
-接收多个音频文件,提取声纹特征向量并计算平均值,将特征向量存储到 Milvus 向量数据库,
-同时在 MySQL 中保存用户信息和权限级别。完成后返回用户 ID、声纹 ID 和权限级别。
+# 接收多个音频文件,提取声纹特征向量并计算平均值,将特征向量存储到 Milvus 向量数据库,
+# 同时在 MySQL 中保存用户信息和权限级别。完成后返回用户 ID、声纹 ID 和权限级别。
 
-Args:
-    request: HTTP PUT 请求对象,包含音频文件、用户名和权限级别
+# Args:
+#     request: HTTP PUT 请求对象,包含音频文件、用户名和权限级别
 
-Returns:
-    JSON 响应,包含:
-    - 成功时: 用户 ID、声纹 ID 和权限级别
-    - 失败时: 错误信息
+# Returns:
+#     JSON 响应,包含:
+#     - 成功时: 用户 ID、声纹 ID 和权限级别
+#     - 失败时: 错误信息
 
-Raises:
-    Exception: 文件处理、特征提取或数据存储过程中的错误
-"""
+# Raises:
+#     Exception: 文件处理、特征提取或数据存储过程中的错误
+#
 def load():
     is_valid, message, files = check_file_in_request(request)
     if not is_valid:
@@ -184,7 +184,7 @@ def asr():
 # @app.route('/recognize', methods=['POST'])
 @app.route('/recognizeAudioPrint', methods=['POST'])
 def recognize():
-    # 检查请求中的文件是否有效 recognizeAudioPrint
+    # 检查请求中的文件是否有效
     is_valid, message, files = check_file_in_request(request)
     if not is_valid:
         flash(message)
@@ -230,8 +230,8 @@ def recognize():
                     permission_level=permission_level,
                     similar_distance=similar_distance,
                     similarity_score=similarity_score,
-                    # asr_result=asr_result,
-                    # possible_action=do_search_action(asr_result)[1]
+                    asr_result=asr_result,
+                    possible_action=do_search_action(asr_result)[1]
                     )
             else:
                 response = qr.result(
