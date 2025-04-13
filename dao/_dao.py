@@ -1,9 +1,9 @@
 from typing import TypeVar, Type, Generic, Optional, List
 
 from pymilvus import FieldSchema
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, Pool, Engine
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import scoped_session, sessionmaker, declarative_base
+from sqlalchemy.orm import scoped_session, sessionmaker, declarative_base, Session
 from sqlalchemy.pool import QueuePool
 
 
@@ -21,7 +21,7 @@ Base = declarative_base()
 T = TypeVar('T', bound=Base)
 
 
-class DAO:
+class DAOBase:
     def connect(self, *args, **kwargs):
         raise NotImplementedError
 
@@ -105,32 +105,14 @@ def sql_suppress(func):
     return wrapper
 
 
-class MySQLDAO(DAO, Generic[T]):
+class DAO(DAOBase, Generic[T]):
     def __init__(self, model: Type[T]):
         self.model: Type[T] = model
+        # self.engine: Engine
+        # self.session: Session
+        # self._get_session: scoped_session[Session]
 
-    def connect(self, host: str, port: int, user: str, password: str, database: str,
-                poolclass=QueuePool,
-                pool_size: int = 5,
-                max_overflow: int = 10,
-                pool_timeout: int = 30,
-                pool_recycle: int = 600,
-                echo: bool = False) -> "MySQLDAO[T]":
-        DB_URL = f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
-        self.engine = create_engine(DB_URL,
-                                    poolclass=poolclass,
-                                    pool_size=pool_size,
-                                    max_overflow=max_overflow,
-                                    pool_timeout=pool_timeout,
-                                    pool_recycle=pool_recycle,
-                                    echo=echo)
-        Base.metadata.create_all(bind=self.engine)
-        session_factory = sessionmaker(bind=self.engine)
-        self._get_session = scoped_session(session_factory)
-        self.session = self._get_session()
-        return self
-
-    def renew_session(self) -> "MySQLDAO[T]":
+    def renew_session(self) -> "DAO[T]":
         self.session.close()
         self.session = self._get_session()
         return self
@@ -171,6 +153,13 @@ class MySQLDAO(DAO, Generic[T]):
 
     @sql_suppress
     def update(self, entry_obj: T, **kwargs) -> bool:
+        """
+        update有两种方案，一种是直接修改ORM对象然后commit，不必走本函数；
+        另一种是使用本函数，其实本身也要传入对象，要修改的字段以键值对的形式传入
+        :param entry_obj:
+        :param kwargs:
+        :return:
+        """
         set_flag = True
         for key, value in kwargs.items():
             if hasattr(entry_obj, key):
@@ -183,6 +172,12 @@ class MySQLDAO(DAO, Generic[T]):
 
     @sql_suppress
     def add(self, entry_obj: Optional[T] = None, **kwargs) -> bool:
+        """
+        增加一个条目，可以传入一个对象，也可以传入字段键值对，（传入对象优先于键值对）
+        :param entry_obj:
+        :param kwargs:
+        :return:
+        """
         if entry_obj is None:
             entry_obj = self.model(**kwargs)
         self.session.add(entry_obj)
@@ -192,6 +187,44 @@ class MySQLDAO(DAO, Generic[T]):
     @sql_suppress
     def commit(self):
         self.session.commit()
+        return self
+
+
+class MySQLDAO(DAO):
+    """
+    一个表对应一个ORM模型对应一个DAO
+    """
+    def connect(self, host: str, port: int, user: str, password: str, database: str,
+                poolclass: Type[Pool] = QueuePool,
+                pool_size: int = 5,
+                max_overflow: int = 10,
+                pool_timeout: int = 30,
+                pool_recycle: int = 600,
+                echo: bool = False) -> "MySQLDAO[T]":
+        DB_URL = f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
+        self.engine: Engine = create_engine(DB_URL,
+                                            poolclass=poolclass,
+                                            pool_size=pool_size,
+                                            max_overflow=max_overflow,
+                                            pool_timeout=pool_timeout,
+                                            pool_recycle=pool_recycle,
+                                            echo=echo)
+        Base.metadata.create_all(bind=self.engine)
+        session_factory = sessionmaker(bind=self.engine)
+        self._get_session = scoped_session(session_factory)
+        self.session: Session = self._get_session()
+        return self
+
+
+class SQLiteDAO(DAO):
+    def connect(self, database: str = "default.db", echo: bool = False) -> "SQLiteDAO[T]":
+        DB_URL = f"sqlite:///./{database}"
+        self.engine: Engine = create_engine(DB_URL, connect_args={
+            "check_same_thread": False}, echo=echo)
+        Base.metadata.create_all(bind=self.engine)
+        session_factory = sessionmaker(bind=self.engine)
+        self._get_session = scoped_session(session_factory)
+        self.session: Session = self._get_session()
         return self
 
 
