@@ -6,11 +6,11 @@ from paddlespeech.cli.vector import VectorExecutor
 from PyQt5 import QtWidgets, QtCore
 
 import config
-from deep_speaker.audio import read_mfcc
-from deep_speaker.batcher import sample_from_mfcc
-from deep_speaker.constants import SAMPLE_RATE, NUM_FRAMES
-from deep_speaker.conv_models import DeepSpeakerModel
-from deep_speaker.test import batch_cosine_similarity
+from audio.deep_speaker.audio import read_mfcc
+from audio.deep_speaker.batcher import sample_from_mfcc
+from audio.deep_speaker.constants import SAMPLE_RATE, NUM_FRAMES
+from audio.deep_speaker.conv_models import DeepSpeakerModel
+from audio.deep_speaker.test import batch_cosine_similarity
 
 version = paddle.__version__
 if version != '2.4.1':

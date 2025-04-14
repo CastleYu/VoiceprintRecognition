@@ -2,12 +2,12 @@ import sys
 
 import numpy as np
 
-from deep_speaker import triplet_loss
-from deep_speaker.batcher import KerasFormatConverter, TripletBatcherSelectHardNegatives, TripletBatcher
-from deep_speaker.constants import NUM_FBANKS, NUM_FRAMES, CHECKPOINTS_TRIPLET_DIR, CHECKPOINTS_SOFTMAX_DIR, BATCH_SIZE
-from deep_speaker.conv_models import DeepSpeakerModel
-from deep_speaker.triplet_loss import deep_speaker_loss
-from deep_speaker.utils import load_best_checkpoint
+from audio.deep_speaker import triplet_loss
+from audio.deep_speaker.batcher import KerasFormatConverter, TripletBatcherSelectHardNegatives, TripletBatcher
+from audio.deep_speaker.constants import NUM_FBANKS, NUM_FRAMES, CHECKPOINTS_TRIPLET_DIR, CHECKPOINTS_SOFTMAX_DIR, BATCH_SIZE
+from audio.deep_speaker.conv_models import DeepSpeakerModel
+from audio.deep_speaker.triplet_loss import deep_speaker_loss
+from audio.deep_speaker.utils import load_best_checkpoint
 
 
 def predict(x):

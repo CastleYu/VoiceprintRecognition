@@ -22,8 +22,8 @@ from tensorflow.keras.models import Model
 # pylint: disable=E0611,E0401
 from tensorflow.keras.optimizers import Adam
 
-from deep_speaker.constants import NUM_FBANKS, SAMPLE_RATE, NUM_FRAMES
-from deep_speaker.triplet_loss import deep_speaker_loss
+from audio.deep_speaker.constants import NUM_FBANKS, SAMPLE_RATE, NUM_FRAMES
+from audio.deep_speaker.triplet_loss import deep_speaker_loss
 
 logger = logging.getLogger(__name__)
 

@@ -7,11 +7,11 @@ from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCh
 from tensorflow.keras.optimizers import SGD
 from tqdm import tqdm
 
-from deep_speaker.batcher import KerasFormatConverter, LazyTripletBatcher
-from deep_speaker.constants import BATCH_SIZE, CHECKPOINTS_SOFTMAX_DIR, CHECKPOINTS_TRIPLET_DIR, NUM_FRAMES, NUM_FBANKS
-from deep_speaker.conv_models import DeepSpeakerModel
-from deep_speaker.triplet_loss import deep_speaker_loss
-from deep_speaker.utils import load_best_checkpoint, ensures_dir
+from audio.deep_speaker.batcher import KerasFormatConverter, LazyTripletBatcher
+from audio.deep_speaker.constants import BATCH_SIZE, CHECKPOINTS_SOFTMAX_DIR, CHECKPOINTS_TRIPLET_DIR, NUM_FRAMES, NUM_FBANKS
+from audio.deep_speaker.conv_models import DeepSpeakerModel
+from audio.deep_speaker.triplet_loss import deep_speaker_loss
+from audio.deep_speaker.utils import load_best_checkpoint, ensures_dir
 
 logger = logging.getLogger(__name__)
 

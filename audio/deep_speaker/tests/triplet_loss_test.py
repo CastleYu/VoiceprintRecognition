@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from deep_speaker.triplet_loss import deep_speaker_loss
+from audio.deep_speaker.triplet_loss import deep_speaker_loss
 
 
 def opposite_positive_equal_negative_batch():

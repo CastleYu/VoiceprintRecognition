@@ -9,10 +9,10 @@ import dill
 import numpy as np
 from tqdm import tqdm
 
-from deep_speaker.audio import pad_mfcc, Audio
-from deep_speaker.constants import NUM_FRAMES, NUM_FBANKS
-from deep_speaker.conv_models import DeepSpeakerModel
-from deep_speaker.utils import ensures_dir, load_pickle, load_npy, train_test_sp_to_utt
+from audio.deep_speaker.audio import pad_mfcc, Audio
+from audio.deep_speaker.constants import NUM_FRAMES, NUM_FBANKS
+from audio.deep_speaker.conv_models import DeepSpeakerModel
+from audio.deep_speaker.utils import ensures_dir, load_pickle, load_npy, train_test_sp_to_utt
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +222,7 @@ class LazyTripletBatcher:
         return batch_x, batch_y
 
     def get_batch_train(self, batch_size):
-        from deep_speaker.test import batch_cosine_similarity
+        from audio.deep_speaker.test import batch_cosine_similarity
         # s1 = time()
         self.batch_count += 1
         if self.batch_count % self.history_every == 0:
@@ -425,7 +425,7 @@ class TripletBatcherSelectHardNegatives(TripletBatcher):
     def get_batch(self, batch_size, is_test=False, predict=None):
         if predict is None:
             predict = self.model.m.predict
-        from deep_speaker.test import batch_cosine_similarity
+        from audio.deep_speaker.test import batch_cosine_similarity
         num_triplets = batch_size // 3
         inputs = []
         k = 2  # do not change this.

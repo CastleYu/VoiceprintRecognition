@@ -3,12 +3,12 @@ import logging
 import numpy as np
 from tqdm import tqdm
 
-from deep_speaker.audio import Audio
-from deep_speaker.batcher import LazyTripletBatcher
-from deep_speaker.constants import NUM_FBANKS, NUM_FRAMES, CHECKPOINTS_TRIPLET_DIR, BATCH_SIZE
-from deep_speaker.conv_models import DeepSpeakerModel
-from deep_speaker.eval_metrics import evaluate
-from deep_speaker.utils import load_best_checkpoint, enable_deterministic
+from audio.deep_speaker.audio import Audio
+from audio.deep_speaker.batcher import LazyTripletBatcher
+from audio.deep_speaker.constants import NUM_FBANKS, NUM_FRAMES, CHECKPOINTS_TRIPLET_DIR, BATCH_SIZE
+from audio.deep_speaker.conv_models import DeepSpeakerModel
+from audio.deep_speaker.eval_metrics import evaluate
+from audio.deep_speaker.utils import load_best_checkpoint, enable_deterministic
 
 logger = logging.getLogger(__name__)
 

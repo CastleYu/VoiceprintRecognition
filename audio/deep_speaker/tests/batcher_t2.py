@@ -1,9 +1,9 @@
 import numpy as np
 
-from deep_speaker.batcher import LazyTripletBatcher
-from deep_speaker.constants import NUM_FBANKS, NUM_FRAMES
-from deep_speaker.conv_models import DeepSpeakerModel
-from deep_speaker.triplet_loss import deep_speaker_loss
+from audio.deep_speaker.batcher import LazyTripletBatcher
+from audio.deep_speaker.constants import NUM_FBANKS, NUM_FRAMES
+from audio.deep_speaker.conv_models import DeepSpeakerModel
+from audio.deep_speaker.triplet_loss import deep_speaker_loss
 
 
 def main2():
