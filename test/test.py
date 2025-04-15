@@ -1,12 +1,12 @@
 import os
+import sys
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
 import csv
 import time
-from pydub import AudioSegment
 import traceback
-import numpy as np
 from pathlib import Path
 from datetime import datetime
-from collections import defaultdict
 import config
 from action.action_matcher import *
 from audio.asr import PaddleSpeechRecognition, SpeechRecognitionAdapter
@@ -15,7 +15,6 @@ from config import AUDIO_TABLE
 from dao.milvus_dao import MilvusClient
 from dao.mysql_dao import MySQLClient
 from utils.audioU import pre_process
-
 # ACCURACY_THRESHOLD = config.Algorithm.threshold#0.8
 ACCURACY_THRESHOLD = 0.2
 MODELS_DIR = config.Update.ModelDir
