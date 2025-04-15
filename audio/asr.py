@@ -10,14 +10,9 @@ if version != '2.4.1':
 
 # from paddlespeech.cli.text import TextExecutor
 
-class SpeechRecognition(ABC):
-    @abstractmethod
-    def recognize(self, audio_file, lang, sample_rate):
-        pass
-
 
 # 适配器
-class SpeechRecognitionAdapter(SpeechRecognition):
+class SpeechRecognitionAdapter:
     def __init__(self, adaptee):
         self.adaptee = adaptee
 

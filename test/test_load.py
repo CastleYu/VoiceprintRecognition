@@ -1,10 +1,13 @@
 import os
+import sys
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
 import csv
 import time
 from pydub import AudioSegment
 from collections import defaultdict
 import traceback
-import numpy as np
 from pathlib import Path
 from datetime import datetime
 import config
@@ -28,6 +31,7 @@ paddleASR = SpeechRecognitionAdapter(PaddleSpeechRecognition())
 paddleVector = SpeakerVerificationAdapter(PaddleSpeakerVerification())
 
 action_matcher = InstructionMatcher(MODELS_DIR).load(MicomlMatcher('paraphrase-multilingual-MiniLM-L12-v2'))
+
 
 def concatenate_audio_files(file_list):
     """
@@ -60,7 +64,7 @@ def concatenate_audio_files(file_list):
                     first_file_dir = os.path.dirname(file_path)
                     first_file_name = os.path.basename(file_path)
             except Exception as e:
-                print(f"⚠️ 跳过无效文件 [{idx+1}/{len(file_list)}]: {file_path}")
+                print(f"⚠️ 跳过无效文件 [{idx + 1}/{len(file_list)}]: {file_path}")
                 print(f"错误详情: {str(e)}")
 
         # 有效性检查
@@ -88,7 +92,7 @@ def concatenate_audio_files(file_list):
         # 打印处理报告
         print(f"✅ 成功拼接 {valid_count}/{len(file_list)} 个文件")
         print(f"📁 输出文件: {output_file}")
-        print(f"⏱️ 总时长: {len(combined)/1000:.2f}秒")
+        print(f"⏱️ 总时长: {len(combined) / 1000:.2f}秒")
 
         return output_file
 
@@ -109,7 +113,7 @@ def batch_load(csv_path: str):
         warmup_duration = time.perf_counter() - start_warmup  # 成功耗时计算
         print(f"数据库预热成功 [耗时 {warmup_duration:.2f}s]")  # 新增成功耗时
     """批量处理CSV文件中的声纹注册请求"""
-     # 创建结果目录
+    # 创建结果目录
     output_dir = Path("batch_registration_results")
     output_dir.mkdir(exist_ok=True)
 
@@ -122,9 +126,9 @@ def batch_load(csv_path: str):
     time_log_file = output_dir / f"timing_{timestamp}.csv"
 
     with open(csv_path, 'r') as input_f, \
-         open(success_file, 'w', newline='') as success_f, \
-         open(fail_file, 'w', newline='') as fail_f, \
-         open(time_log_file, 'w', newline='') as time_f:
+            open(success_file, 'w', newline='') as success_f, \
+            open(fail_file, 'w', newline='') as fail_f, \
+            open(time_log_file, 'w', newline='') as time_f:
 
         # 初始化增强版写入器
         success_writer = csv.DictWriter(success_f, fieldnames=[
@@ -165,7 +169,8 @@ def batch_load(csv_path: str):
             file_count = len(rows)
 
             # 初始化计时
-            timing = {'directory': str(dir_path)}
+            timing = {
+                'directory': str(dir_path)}
             start_total = time.perf_counter()
 
             try:
@@ -219,7 +224,8 @@ def batch_load(csv_path: str):
 
     print(f"\n✅ 批量处理完成！结果保存在: {output_dir}")
 
-def process_registration(file_list , username: str, permission_level: int, timing: dict) -> tuple:
+
+def process_registration(file_list, username: str, permission_level: int, timing: dict) -> tuple:
     """处理单个注册请求"""
     result = {}
     temp_files = []
@@ -234,7 +240,7 @@ def process_registration(file_list , username: str, permission_level: int, timin
 
         # === 特征提取 ===
         start = time.perf_counter()
-        audio_emb = paddleVector.get_embedding(processed_path)
+        audio_emb = paddleVector.get_embedding_from_file(processed_path)
         timing['feature_extract'] = time.perf_counter() - start
 
         # === 多文件向量平均 ===
@@ -276,9 +282,11 @@ def process_registration(file_list , username: str, permission_level: int, timin
 
     return result, timing
 
+
 class RegistrationError(Exception):
     """自定义注册异常"""
     pass
+
 
 if __name__ == "__main__":
     batch_load(r"P:\xiangmu\python\Voice\Load.csv")

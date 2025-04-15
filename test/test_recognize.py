@@ -1,3 +1,8 @@
+import os
+import sys
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
 import csv
 import time
 import numpy as np
@@ -11,6 +16,7 @@ from config import AUDIO_TABLE
 # 初始化Milvus客户端
 milvus_client = MilvusClient(config.Milvus.host, config.Milvus.port)
 milvus_client.create_collection(AUDIO_TABLE)
+
 
 # 用户数据全量缓存
 class UserCache:
@@ -37,11 +43,13 @@ class UserCache:
     def get_username(self, user_id):
         return self.cache.get(user_id, 'Unknown')
 
+
 # 初始化全局缓存
 user_cache = UserCache()
 
 # 初始化语音特征提取器
 paddleVector = SpeakerVerificationAdapter(PaddleSpeakerVerification())
+
 
 def batch_voice_recognition(test_csv_path, result_csv_path, top_k=1):
     """优化版批量语音识别函数"""
@@ -59,7 +67,7 @@ def batch_voice_recognition(test_csv_path, result_csv_path, top_k=1):
             try:
                 # 特征提取
                 processed_path = pre_process(file_path)
-                audio_embedding = paddleVector.get_embedding(processed_path)
+                audio_embedding = paddleVector.get_embedding_from_file(processed_path)
 
                 # 向量搜索
                 search_results = milvus_client.search(audio_embedding, AUDIO_TABLE, top_k)
@@ -93,6 +101,7 @@ def batch_voice_recognition(test_csv_path, result_csv_path, top_k=1):
     total_time = time.time() - start_time
     print(f"\n处理完成 | 总文件: {len(test_files)} | 耗时: {total_time:.2f}秒")
     return total_time
+
 
 # 使用示例
 if __name__ == "__main__":

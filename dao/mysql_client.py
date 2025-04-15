@@ -1,3 +1,8 @@
+"""
+使用指导：
+
+"""
+
 from sqlalchemy import QueuePool
 
 from ._dao import MySQLDAO, Base
@@ -7,32 +12,16 @@ DEBUG = False
 
 
 class ConnectPoolConfig:
-    poolclass = QueuePool,
+    poolclass = QueuePool
     pool_size = 5
     max_overflow = 10
     pool_timeout = 30
     pool_recycle = 600
 
 
-class MySQLClient:
-    def __init__(self, host, port, user, password, database):
-        self.user = MySQLDAO(User)
-        self.command = MySQLDAO(Command)
-        key_dict = {
-            'host': host,
-            'port': port,
-            'user': user,
-            'password': password,
-            'database': database,
-            'poolclass': ConnectPoolConfig.poolclass,
-            "pool_size": ConnectPoolConfig.pool_size,
-            "max_overflow": ConnectPoolConfig.max_overflow,
-            "pool_timeout": ConnectPoolConfig.pool_timeout,
-            "pool_recycle": ConnectPoolConfig.pool_recycle,
-            "echo": DEBUG
-        }
-        self.user.connect(**key_dict)
-        self.command.connect(**key_dict)
+class SQLClient:
+    command: MySQLDAO
+    user: MySQLDAO
 
     def add_command(self, command, label="LAUNCH"):
         self.command.add(Command(action=command, label=label))
@@ -56,11 +45,35 @@ class MySQLClient:
     def del_user(self, id_):
         self.user.delete(self.user.get_one(id=id_))
 
-    def get_user_by_id(self, id_):
-        return self.user.get(id=id_)
+    def get_user_by_id(self, id_) -> User:
+        return self.user.get_one(id=id_)
 
     def get_all_users(self):
         return self.user.get_all()
 
     def update_user(self):
+        """请使用直接修改User对象的方案，此处函数等价于commit"""
         self.user.commit()
+
+
+class MySQLClient(SQLClient):
+    def __init__(self, host, port, user, password, database):
+        self.user = MySQLDAO(User)
+        self.command = MySQLDAO(Command)
+        key_dict = {
+            'host': host,
+            'port': port,
+            'user': user,
+            'password': password,
+            'database': database,
+            'poolclass': ConnectPoolConfig.poolclass,
+            "pool_size": ConnectPoolConfig.pool_size,
+            "max_overflow": ConnectPoolConfig.max_overflow,
+            "pool_timeout": ConnectPoolConfig.pool_timeout,
+            "pool_recycle": ConnectPoolConfig.pool_recycle,
+            "echo": DEBUG
+        }
+        self.user.connect(**key_dict)
+        self.command.connect(**key_dict)
+
+
