@@ -234,7 +234,7 @@ def process_registration(file_list , username: str, permission_level: int, timin
 
         # === 特征提取 ===
         start = time.perf_counter()
-        audio_emb = paddleVector.get_embedding(processed_path)
+        audio_emb = paddleVector.get_embedding_from_file(processed_path)
         timing['feature_extract'] = time.perf_counter() - start
 
         # === 多文件向量平均 ===

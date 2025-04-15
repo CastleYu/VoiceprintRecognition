@@ -122,7 +122,7 @@ class BatchProcessor:
 
             # 特征提取
             start = time.perf_counter()
-            embedding = self.vector_engine.get_embedding(processed_path)
+            embedding = self.vector_engine.get_embedding_from_file(processed_path)
             timing['feature_extract'] = time.perf_counter() - start
 
             # 向量搜索

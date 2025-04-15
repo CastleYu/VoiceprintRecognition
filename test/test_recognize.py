@@ -59,7 +59,7 @@ def batch_voice_recognition(test_csv_path, result_csv_path, top_k=1):
             try:
                 # 特征提取
                 processed_path = pre_process(file_path)
-                audio_embedding = paddleVector.get_embedding(processed_path)
+                audio_embedding = paddleVector.get_embedding_from_file(processed_path)
 
                 # 向量搜索
                 search_results = milvus_client.search(audio_embedding, AUDIO_TABLE, top_k)
