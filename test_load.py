@@ -151,7 +151,7 @@ def batch_load(csv_path: str):
         reader = csv.DictReader(input_f)
         dir_groups = defaultdict(list)
         for row in reader:
-            dir_path = Path(row['filename']).parent
+            dir_path = Path(row['filepath']).parent
             dir_groups[dir_path].append(row)
 
         # 处理每个目录组
@@ -159,7 +159,7 @@ def batch_load(csv_path: str):
             print(f"\n📂 正在处理目录 {dir_idx}/{len(dir_groups)}: {dir_path}")
 
             # 准备基础数据
-            file_list = [row['filename'] for row in rows]
+            file_list = [row['filepath'] for row in rows]
             username = rows[0]['username']
             permission_level = int(rows[0]['permission_level'])
             file_count = len(rows)
@@ -281,4 +281,4 @@ class RegistrationError(Exception):
     pass
 
 if __name__ == "__main__":
-    batch_load(r"P:\xiangmu\python\Voice\Load.csv")
+    batch_load(r"P:\xiangmu\python\Voice\Load_6_7.csv")
