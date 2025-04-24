@@ -35,3 +35,9 @@ def pre_process(audio_file):
     reduced_noise_audio.export(output_file, format="wav")
 
     return output_file
+
+
+if __name__ == '__main__':
+    from ui_runner import FileDropApp
+
+    FileDropApp(pre_process).run()

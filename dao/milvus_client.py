@@ -1,3 +1,5 @@
+from typing import Union
+
 from ._dao import MilvusDAO
 
 
@@ -21,11 +23,11 @@ class MilvusClient:
         dao = self.get_dao(collection_name)
         return dao.add(vectors)
 
-    def search(self, collection_name: str, query_vectors: list, top_k: int = 1, nprobe: int = 10):
+    def search(self, collection_name: str, query_vector: list, top_k: int = 1, nprobe: int = 10):
         dao = self.get_dao(collection_name)
-        return dao.search(query_vectors, top_k=top_k, nprobe=nprobe)
+        return dao.search(query_vector, top_k=top_k, nprobe=nprobe)
 
-    def delete_by_id(self, collection_name: str, id_to_delete: int) -> bool:
+    def delete_by_id(self, collection_name: str, id_to_delete: Union[int, str]) -> bool:
         dao = self.get_dao(collection_name)
         return dao.delete_by_id(id_to_delete)
 
@@ -36,4 +38,3 @@ class MilvusClient:
     def query_all(self, collection_name: str):
         dao = self.get_dao(collection_name)
         return dao.get_all()
-

@@ -9,11 +9,11 @@ from action.action_matcher import *
 from action.intent_recg import IntentRecognition
 from audio.asr import PaddleSpeechRecognition, SpeechRecognitionAdapter
 from audio.vector import PaddleSpeakerVerification, SpeakerVerificationAdapter
-from config import AUDIO_TABLE, UPLOAD_FOLDER
+from config import AUDIO_TABLE, UPLOAD_FOLDER, ROOT_DIR
 from const import SUCCESS, FAILED
 from dao import *
 from utils.audioU import pre_process
-from utils.fileU import check_file_in_request, save_file
+from utils.fileU import check_file_in_request, save_file, create_path
 from utils.responseU import QuickResponse as qr
 
 app = Flask(__name__)
@@ -24,11 +24,13 @@ app.config['DEBUG'] = True
 ACCURACY_THRESHOLD = config.Algorithm.threshold
 MODELS_DIR = config.Update.ModelDir
 
+# milvus_client_ins = MilvusClientLegacy(config.Milvus.host, config.Milvus.port)
+milvus_client_ins = None
 milvus_client = MilvusClient(config.Milvus.host, config.Milvus.port)
-milvus_client.create_collection(AUDIO_TABLE)
-mysql_client = MySQLClientP(config.MySQL.host, config.MySQL.port, config.MySQL.user,
-                            config.MySQL.password, config.MySQL.database)
-
+mysql_client = MySQLClient(config.MySQL.host, config.MySQL.port, config.MySQL.user,
+                           config.MySQL.password, config.MySQL.database)
+sqlite_client = SQLiteClient(create_path("data", "database.db"), False)
+sql_client = mysql_client
 paddleASR = SpeechRecognitionAdapter(PaddleSpeechRecognition())
 paddleVector = SpeakerVerificationAdapter(PaddleSpeakerVerification())
 
@@ -50,7 +52,7 @@ def do_search_action(action):
         raise Exception(intent_result)
     label = intent_data.get('intent', 'LAUNCH')  # 获取意图识别后的标签
 
-    command_objs = mysql_client.get_command_by_label(label)
+    command_objs = sql_client.get_command_by_label(label)
     action_set = [(cmd.id, cmd.action) for cmd in command_objs]
 
     if action_set:
@@ -93,13 +95,12 @@ def load():
 
         # 将特征向量插入 Milvus 并获取 ID
         milvus_ids = milvus_client.insert(AUDIO_TABLE, [average_emb.tolist()])
-        milvus_client.create_index(AUDIO_TABLE)
 
         # 将 ID 和音频信息存储到 MySQL
         username = request.form.get('username')
         permission_level = int(request.form.get('permission_level'))
         new_user = User(username=username, voiceprint=milvus_ids[0], permission_level=permission_level)
-        mysql_client.user.add(new_user)
+        sql_client.user.add(new_user)
         user_id = new_user.id
         response = qr.data(
             user_id=user_id,
@@ -131,17 +132,17 @@ def delete_user():
         return redirect(request.url)
 
     # 从MySQL中删除指令
-    user = mysql_client.get_user_by_id(user_id)
+    user = sql_client.get_user_by_id(user_id)
     voiceprint_id = user.voiceprint if user else None
     milvus_client.delete_by_id(AUDIO_TABLE, voiceprint_id)
-    mysql_client.del_user(user_id)
+    sql_client.del_user(user_id)
 
     return jsonify(qr.success())
 
 
 @app.route('/get_all_user', methods=['GET'])
 def get_all_user():
-    user_set = mysql_client.get_all_users()
+    user_set = sql_client.get_all_users()
     response = qr.data(user_set=user_set)
     return jsonify(response)
 
@@ -149,8 +150,8 @@ def get_all_user():
 @app.route('/delete_all_user', methods=['GET'])
 def delete_all_user():
     try:
-        for user in mysql_client.get_all_users():
-            mysql_client.del_user(user.id)
+        for user in sql_client.get_all_users():
+            sql_client.del_user(user.id)
         milvus_client.delete_all(AUDIO_TABLE)
         return jsonify(qr.success())
     except Exception as e:
@@ -164,11 +165,11 @@ def update_user():
     permission_level = int(request.form.get('permission_level'))
     user_id = int(request.form.get('id'))
 
-    user = mysql_client.get_user_by_id(user_id)
+    user = sql_client.get_user_by_id(user_id)
     if user:
         user.username = username
         user.permission_level = permission_level
-        mysql_client.update_user()
+        sql_client.update_user()
 
     return jsonify(qr.success())
 
@@ -219,7 +220,7 @@ def recognize():
         audio_embedding = paddleVector.get_embedding_from_file(pro_path)
 
         # 在 Milvus 中搜索相似音频
-        search_results = milvus_client.search(audio_embedding, AUDIO_TABLE, 1)
+        search_results = milvus_client.search(AUDIO_TABLE, audio_embedding, top_k=1)
         user_name = 'None'
         similar_distance = '0'
         similarity_score = '0'
@@ -229,7 +230,7 @@ def recognize():
 
         if search_results:
             user_id = str(search_results[0][0].id)
-            user = mysql_client.get_user_by_id(user_id)
+            user = sql_client.get_user_by_id(user_id)
             user_name = user.username
             permission_level = user.permission_level
             similar_distance = search_results[0][0].distance
@@ -306,7 +307,7 @@ def wake():
             audio_embedding = paddleVector.get_embedding_from_file(pro_path)
 
             # 在 Milvus 中搜索相似音频
-            search_results = milvus_client.search(audio_embedding, AUDIO_TABLE, 1)
+            search_results = milvus_client.search(AUDIO_TABLE, audio_embedding, top_k=1)
             similarity_score = '0'
             user_id = '0'
 
@@ -361,7 +362,7 @@ def add_action():
         return redirect(request.url)
 
     # 将指令插入到MySQL
-    mysql_client.add_command(action)
+    sql_client.add_command(action)
 
     return jsonify(qr.success())
 
@@ -381,7 +382,7 @@ def delete_action():
         return redirect(request.url)
 
     # 从MySQL中删除指令
-    mysql_client.del_command(action)
+    sql_client.del_command(action)
 
     return jsonify(qr.success())
 
@@ -411,7 +412,7 @@ def search_action():
 @app.route('/get_all_action', methods=['GET'])
 def get_all_action():
     milvus_client.query_all(AUDIO_TABLE)
-    action_set = [cmd.action for cmd in mysql_client.get_all_commands()]
+    action_set = [cmd.action for cmd in sql_client.get_all_commands()]
 
     response = qr.data(action_set=action_set)
     return jsonify(response)

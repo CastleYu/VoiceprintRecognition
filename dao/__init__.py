@@ -1,5 +1,15 @@
-from .mysql_client import MySQLClient as MySQLClientP
-from .mysql_dao import MySQLClient
-from .milvus_dao import MilvusClient
-from .milvus_client import MilvusClient as MilvusClientP
-from .model import *
+from .mysql_client import MySQLClient, SQLiteClient
+from .milvus_client import MilvusClient
+from .model import User, Command, VoicePrint
+
+__all__ = [
+    # 客户端
+    "MySQLClient",
+    "SQLiteClient",
+    "MilvusClient",
+
+    # ORM 模型
+    "User",
+    "Command",
+    "VoicePrint",
+]

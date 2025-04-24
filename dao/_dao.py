@@ -1,6 +1,5 @@
-from typing import TypeVar, Type, Generic, Optional, List
+from typing import TypeVar, Type, Generic, Optional, List, Union
 
-from pymilvus import FieldSchema
 from sqlalchemy import create_engine, Pool, Engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import scoped_session, sessionmaker, declarative_base, Session
@@ -108,9 +107,6 @@ def sql_suppress(func):
 class DAO(DAOBase, Generic[T]):
     def __init__(self, model: Type[T]):
         self.model: Type[T] = model
-        # self.engine: Engine
-        # self.session: Session
-        # self._get_session: scoped_session[Session]
 
     def renew_session(self) -> "DAO[T]":
         self.session.close()
@@ -239,6 +235,8 @@ from pymilvus import (
 
 
 class MilvusDAO:
+    collection: Collection
+
     def __init__(self, collection_name: str, dim: int = 192, index_params: dict = None):
         self.collection_name = collection_name
         self.dim = dim
@@ -248,7 +246,7 @@ class MilvusDAO:
             "params": {
                 "nlist": 128}
         }
-        self.collection: Collection = None
+        self.collection: Optional[Collection] = None
 
     def connect(self, host: str, port: int):
         """连接 Milvus 服务器，并获取或创建集合"""
@@ -283,10 +281,10 @@ class MilvusDAO:
         result = self.collection.insert([vectors])
         return result.primary_keys
 
-    def search(self, query_vectors: list, top_k: int = 1, nprobe: int = 10):
+    def search(self, query_vector: list, top_k: int = 1, nprobe: int = 10):
         """
         搜索最相近的向量
-        :param query_vectors: 查询向量
+        :param query_vector: 查询向量
         :param top_k: 返回最相似的前 k 个结果
         :param nprobe: 搜索参数 nprobe（影响搜索准确性和速度）
         :return: 搜索结果列表
@@ -296,7 +294,7 @@ class MilvusDAO:
             "params": {
                 "nprobe": nprobe}}
         results = self.collection.search(
-            data=[query_vectors],
+            data=[query_vector],
             anns_field="vec",
             param=search_params,
             limit=top_k,
@@ -304,7 +302,7 @@ class MilvusDAO:
         )
         return results
 
-    def delete_by_id(self, id_to_delete: int) -> bool:
+    def delete_by_id(self, id_to_delete: Union[int, str]) -> bool:
         """
         根据主键删除数据
         :param id_to_delete: 需要删除的 ID

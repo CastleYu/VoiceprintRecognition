@@ -35,3 +35,10 @@ def save_file(file, upload_folder):
     file_path = os.path.join(upload_folder, filename)
     file.save(file_path)
     return file_path
+
+
+def create_path(*path):
+    return os.path.abspath(os.path.join(*path))
+
+
+
