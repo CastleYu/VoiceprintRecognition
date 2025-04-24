@@ -82,7 +82,6 @@ def download_resources(assets_list):
                 if os.path.exists(file_name):
                     os.remove(file_name)
 
-
 def unzip(file_name=None):
     import zipfile
     root = RESOURCES_DIR

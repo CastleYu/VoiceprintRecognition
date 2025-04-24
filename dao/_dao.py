@@ -104,11 +104,15 @@ def sql_suppress(func):
     return wrapper
 
 
-class DAO(DAOBase, Generic[T]):
+class SQLDAO(DAOBase, Generic[T]):
+    engine: Engine
+    session: Session
+    _get_session: scoped_session[Session]
+
     def __init__(self, model: Type[T]):
         self.model: Type[T] = model
 
-    def renew_session(self) -> "DAO[T]":
+    def renew_session(self) -> "SQLDAO[T]":
         self.session.close()
         self.session = self._get_session()
         return self
@@ -186,10 +190,11 @@ class DAO(DAOBase, Generic[T]):
         return self
 
 
-class MySQLDAO(DAO):
+class MySQLDAO(SQLDAO):
     """
     一个表对应一个ORM模型对应一个DAO
     """
+
     def connect(self, host: str, port: int, user: str, password: str, database: str,
                 poolclass: Type[Pool] = QueuePool,
                 pool_size: int = 5,
@@ -212,7 +217,7 @@ class MySQLDAO(DAO):
         return self
 
 
-class SQLiteDAO(DAO):
+class SQLiteDAO(SQLDAO):
     def connect(self, database: str = "default.db", echo: bool = False) -> "SQLiteDAO[T]":
         DB_URL = f"sqlite:///./{database}"
         self.engine: Engine = create_engine(DB_URL, connect_args={
