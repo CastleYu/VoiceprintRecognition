@@ -9,19 +9,28 @@ class MilvusClient:
         self.port = port
         self.daos = {}  # 保存各集合对应的 DAO 对象
 
-    def get_dao(self, collection_name: str) -> MilvusDAO:
+    def get_dao(self,
+                collection_name: str,
+                dim: int = 192,
+                alias="default",
+                auto_id=True,
+                index_params=None) -> MilvusDAO:
         """
         根据集合名称获取对应的 DAO 实例；若不存在则创建并连接
         """
         if collection_name not in self.daos:
-            dao = MilvusDAO(collection_name=collection_name)
-            dao.connect(self.host, self.port)
+            dao = MilvusDAO(collection_name=collection_name, dim=dim, index_params=index_params)
+            dao.connect(self.host, self.port, alias=alias, auto_id=auto_id)
             self.daos[collection_name] = dao
         return self.daos[collection_name]
 
     def insert(self, collection_name: str, vectors: list):
         dao = self.get_dao(collection_name)
         return dao.add(vectors)
+
+    def insert_with_ids(self, collection_name: str, ids: list, vectors: list):
+        dao = self.get_dao(collection_name)
+        return dao.add_with_ids(ids, vectors)
 
     def search(self, collection_name: str, query_vector: list, top_k: int = 1, nprobe: int = 10):
         dao = self.get_dao(collection_name)

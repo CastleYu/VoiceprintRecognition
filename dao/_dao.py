@@ -242,7 +242,7 @@ from pymilvus import (
 class MilvusDAO:
     collection: Collection
 
-    def __init__(self, collection_name: str, dim: int = 192, index_params: dict = None):
+    def __init__(self, collection_name: str, dim: int, index_params: dict = None):
         self.collection_name = collection_name
         self.dim = dim
         self.index_params = index_params or {
@@ -253,13 +253,13 @@ class MilvusDAO:
         }
         self.collection: Optional[Collection] = None
 
-    def connect(self, host: str, port: int):
+    def connect(self, host: str, port: int, alias, auto_id):
         """连接 Milvus 服务器，并获取或创建集合"""
-        connections.connect(alias='default', host=host, port=port)
-        self.collection = self._create_or_get_collection(self.collection_name)
+        connections.connect(alias=alias, host=host, port=port)
+        self.collection = self._create_or_get_collection(self.collection_name, auto_id=auto_id)
         return self
 
-    def _create_or_get_collection(self, name: str) -> Collection:
+    def _create_or_get_collection(self, name: str, auto_id: bool) -> Collection:
         """如果集合存在则加载，不存在则创建集合和索引"""
         if utility.has_collection(name):
             collection = Collection(name=name)
@@ -268,7 +268,7 @@ class MilvusDAO:
             collection.load()
         else:
             fields = [
-                FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
+                FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=auto_id),
                 FieldSchema(name="vec", dtype=DataType.FLOAT_VECTOR, dim=self.dim)
             ]
             schema = CollectionSchema(fields=fields, description="vector collection")
@@ -284,6 +284,16 @@ class MilvusDAO:
         :return: 插入数据的主键列表
         """
         result = self.collection.insert([vectors])
+        return result.primary_keys
+
+    def add_with_ids(self, ids: list, vectors: list):
+        """
+        显式指定 ID 插入向量，仅适用于 auto_id=False 的集合
+        :param ids: 主键 ID 列表
+        :param vectors: 向量数据列表
+        :return: 插入后的主键列表
+        """
+        result = self.collection.insert([ids, vectors])
         return result.primary_keys
 
     def search(self, query_vector: list, top_k: int = 1, nprobe: int = 10):

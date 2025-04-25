@@ -24,8 +24,6 @@ app.config['DEBUG'] = True
 ACCURACY_THRESHOLD = config.Algorithm.threshold
 MODELS_DIR = config.Update.ModelDir
 
-# milvus_client_ins = MilvusClientLegacy(config.Milvus.host, config.Milvus.port)
-milvus_client_ins = None
 milvus_client = MilvusClient(config.Milvus.host, config.Milvus.port)
 mysql_client = MySQLClient(config.MySQL.host, config.MySQL.port, config.MySQL.user,
                            config.MySQL.password, config.MySQL.database)
