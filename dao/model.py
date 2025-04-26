@@ -12,6 +12,9 @@ class User(Base):
     voiceprint = Column(String(64))
     permission_level = Column(Integer)
 
+    def __repr__(self):
+        return f"<User(id={self.id}, username='{self.username}', voiceprint='{self.voiceprint}', permission_level={self.permission_level})>"
+
 
 class Command(Base):
     __tablename__ = 'command'
