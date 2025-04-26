@@ -1,9 +1,19 @@
 import traceback
+import tempfile
+import librosa
+import soundfile as sf
+import numpy as np
+import random
+import logging
 
 from flask import Flask, request, redirect, flash, jsonify
 from flask_cors import CORS
 
 import config
+
+# Configure logging
+logger = logging.getLogger(__name__)
+SAMPLE_RATE = 16000  # Standard sample rate for voice processing
 from action.action_matcher import *
 from action.intent_recg import IntentRecognition
 from audio.asr import PaddleSpeechRecognition, SpeechRecognitionAdapter
@@ -30,7 +40,7 @@ sqlite_client = SQLiteClient(create_path("data", "database.db"), False)
 sql_client = mysql_client
 paddleASR = SpeechRecognitionAdapter(PaddleSpeechRecognition())
 paddleVector = SpeakerVerificationAdapter(PaddleSpeakerVerification())
-deep_speakerVector = SpeakerVerificationAdapter(DeepSpeakerVerification)  # 初始化deep speaker模型
+deep_speakerVector = SpeakerVerificationAdapter(DeepSpeakerVerification())  # 初始化deep speaker模型
 
 action_matcher = InstructionMatcher(MODELS_DIR).load(MicomlMatcher('paraphrase-multilingual-MiniLM-L12-v2'))
 intent_recognizer = IntentRecognition(
@@ -74,52 +84,94 @@ def do_search_action(action):
 def load():
     is_valid, message, files = check_file_in_request(request)
     if not is_valid:
-        flash(message)
-        return redirect(request.url)
-
-    file_paths = []
-    for file in files:
-        file_path = save_file(file, UPLOAD_FOLDER)
-        file_paths.append(file_path)
+        return jsonify(qr.error(message))
 
     try:
-        audio_embs_192 = []
-        audio_embs_512 = []
-        for file_path in file_paths:
-            pro_path = pre_process(file_path)
-            # 生成192维向量
-            emb_192 = paddleVector.get_embedding_from_file(pro_path)
-            audio_embs_192.append(emb_192)
-            # 生成512维向量 (使用deep speaker模型)
-            emb_512 = deep_speakerVector.get_embedding_from_file(pro_path)  # 假设模型有get_embedding方法
-            audio_embs_512.append(emb_512)
+        # 1. 分段处理音频文件
+        segments = []
+        total_duration = 0
 
-        # 计算平均向量
-        average_192 = np.mean(np.array(audio_embs_192), axis=0)
-        average_512 = np.mean(np.array(audio_embs_512), axis=0)
+        for file in files:
+            # 保存临时文件
+            file_path = save_file(file, UPLOAD_FOLDER)
 
-        # 将192维特征向量插入 Milvus 并获取 ID
-        milvus_ids = milvus_client.insert(AUDIO_TABLE, [average_192.tolist()])
-        # 将512维特征向量插入到deepSpeaker_vp512集合，使用相同ID
-        milvus_client.insert_with_ids("deepSpeaker_vp512", milvus_ids, [average_512])
+            # 读取音频并计算时长
+            y, sr = librosa.load(file_path, sr=None)
+            duration = librosa.get_duration(y=y, sr=sr)
+            total_duration += duration
 
-        # 将 ID 和音频信息存储到 MySQL
+            # 存储分段信息
+            segments.append({
+                'path': file_path,
+                'data': y,
+                'sr': sr,
+                'duration': duration
+            })
+
+        # 2. 时长验证
+        if total_duration < 10:
+            raise ValueError(f"总时长不足10秒(当前{total_duration:.2f}秒)")
+
+        # 3. 智能采样策略
+        target_samples = 15 * SAMPLE_RATE  # 15秒的目标采样数
+        sampled_audio = np.zeros(target_samples, dtype=np.float32)
+        current_pos = 0
+
+        # 随机打乱片段顺序增加多样性
+        random.shuffle(segments)
+
+        for seg in segments:
+            seg_samples = len(seg['data'])
+            remaining_space = target_samples - current_pos
+
+            if remaining_space <= 0:
+                break
+
+            # 取片段的一部分(至少1秒)
+            take_samples = min(seg_samples, remaining_space,
+                              max(int(seg['sr']), remaining_space//2))
+
+            start = random.randint(0, max(0, seg_samples - take_samples))
+            sampled_audio[current_pos:current_pos+take_samples] = \
+                seg['data'][start:start+take_samples]
+            current_pos += take_samples
+
+        # 4. 保存采样后的音频
+        temp_file = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+        sf.write(temp_file.name, sampled_audio[:current_pos], SAMPLE_RATE)
+        temp_file.close()
+
+        # 5. 生成声纹特征
+        pro_path = pre_process(temp_file.name)
+        emb_192 = paddleVector.get_embedding_from_file(pro_path)
+        emb_512 = deep_speakerVector.get_embedding_from_file(pro_path).squeeze()
+
+        # 6. 存储到数据库
+        milvus_ids = milvus_client.insert(AUDIO_TABLE, [emb_192.tolist()])
+        milvus_client.insert_with_ids("deepSpeaker_vp512", [milvus_ids[0]], [emb_512.tolist()])
+
         username = request.form.get('username')
         permission_level = int(request.form.get('permission_level'))
-        new_user = User(username=username, voiceprint=milvus_ids[0], permission_level=permission_level)
+        new_user = User(username=username, voiceprint=milvus_ids, permission_level=permission_level)
         sql_client.user.add(new_user)
-        user_id = new_user.id
+
         response = qr.data(
-            user_id=user_id,
+            user_id=new_user.id,
             voiceprint=milvus_ids[0],
-            permission_level=permission_level
+            permission_level=permission_level,
+            actual_duration=current_pos/SAMPLE_RATE
         )
+
     except Exception as e:
-        traceback.print_exc()
-        response = qr.error(e)
+        response = qr.error(str(e))
+        logger.error(f"注册失败: {str(e)}", exc_info=True)
     finally:
-        for file_path in file_paths:
-            os.remove(file_path)
+        # 清理临时文件
+        for seg in segments:
+            if os.path.exists(seg['path']):
+                os.remove(seg['path'])
+        if 'temp_file' in locals() and os.path.exists(temp_file.name):
+            os.remove(temp_file.name)
 
     return jsonify(response)
 
@@ -151,6 +203,7 @@ def delete_user():
 def get_all_user():
     user_set = sql_client.get_all_users()
     response = qr.data(user_set=user_set)
+    print(response)
     return jsonify(response)
 
 
