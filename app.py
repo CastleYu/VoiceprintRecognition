@@ -203,9 +203,17 @@ def delete_user():
 
 @app.route('/get_all_user', methods=['GET'])
 def get_all_user():
-    user_set = sql_client.get_all_users()
-    response = qr.data(user_set=user_set)
-    print(response)
+    users = sql_client.get_all_users()
+    user_dict_list = [
+        {
+            'id': user.id,
+            "username": user.username,
+            'voiceprint': user.voiceprint,
+            'permission_level': user.permission_level
+        }
+        for user in users
+    ]
+    response = qr.data(user_set=user_dict_list)
     return jsonify(response)
 
 

@@ -20,8 +20,8 @@ class ConnectPoolConfig:
 
 
 class SQLClient:
-    command: SQLDAO
-    user: SQLDAO
+    command: SQLDAO[Command]
+    user: SQLDAO[User]
 
     def add_command(self, command, label="LAUNCH"):
         self.command.add(Command(action=command, label=label))
@@ -81,8 +81,8 @@ class MySQLClient(SQLClient):
 
 
 class SQLiteClient(SQLClient):
-    command: SQLiteDAO
-    user: SQLiteDAO
+    command: SQLiteDAO[Command]
+    user: SQLiteDAO[User]
 
     def __init__(self, database: str = "default.db", echo: bool = False):
         self.user = SQLiteDAO(User)
