@@ -1,6 +1,5 @@
-from typing import TypeVar, Type, Generic, Optional, List
+from typing import TypeVar, Type, Generic, Optional, List, Union
 
-from pymilvus import FieldSchema
 from sqlalchemy import create_engine, Pool, Engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import scoped_session, sessionmaker, declarative_base, Session
@@ -105,14 +104,15 @@ def sql_suppress(func):
     return wrapper
 
 
-class DAO(DAOBase, Generic[T]):
+class SQLDAO(DAOBase, Generic[T]):
+    engine: Engine
+    session: Session
+    _get_session: scoped_session[Session]
+
     def __init__(self, model: Type[T]):
         self.model: Type[T] = model
-        # self.engine: Engine
-        # self.session: Session
-        # self._get_session: scoped_session[Session]
 
-    def renew_session(self) -> "DAO[T]":
+    def renew_session(self) -> "SQLDAO[T]":
         self.session.close()
         self.session = self._get_session()
         return self
@@ -190,10 +190,11 @@ class DAO(DAOBase, Generic[T]):
         return self
 
 
-class MySQLDAO(DAO):
+class MySQLDAO(SQLDAO):
     """
     一个表对应一个ORM模型对应一个DAO
     """
+
     def connect(self, host: str, port: int, user: str, password: str, database: str,
                 poolclass: Type[Pool] = QueuePool,
                 pool_size: int = 5,
@@ -216,7 +217,7 @@ class MySQLDAO(DAO):
         return self
 
 
-class SQLiteDAO(DAO):
+class SQLiteDAO(SQLDAO):
     def connect(self, database: str = "default.db", echo: bool = False) -> "SQLiteDAO[T]":
         DB_URL = f"sqlite:///./{database}"
         self.engine: Engine = create_engine(DB_URL, connect_args={
@@ -239,7 +240,9 @@ from pymilvus import (
 
 
 class MilvusDAO:
-    def __init__(self, collection_name: str, dim: int = 192, index_params: dict = None):
+    collection: Collection
+
+    def __init__(self, collection_name: str, dim: int, index_params: dict = None):
         self.collection_name = collection_name
         self.dim = dim
         self.index_params = index_params or {
@@ -248,15 +251,15 @@ class MilvusDAO:
             "params": {
                 "nlist": 128}
         }
-        self.collection: Collection = None
+        self.collection: Optional[Collection] = None
 
-    def connect(self, host: str, port: int):
+    def connect(self, host: str, port: int, alias, auto_id):
         """连接 Milvus 服务器，并获取或创建集合"""
-        connections.connect(alias='default', host=host, port=port)
-        self.collection = self._create_or_get_collection(self.collection_name)
+        connections.connect(alias=alias, host=host, port=port)
+        self.collection = self._create_or_get_collection(self.collection_name, auto_id=auto_id)
         return self
 
-    def _create_or_get_collection(self, name: str) -> Collection:
+    def _create_or_get_collection(self, name: str, auto_id: bool) -> Collection:
         """如果集合存在则加载，不存在则创建集合和索引"""
         if utility.has_collection(name):
             collection = Collection(name=name)
@@ -265,7 +268,7 @@ class MilvusDAO:
             collection.load()
         else:
             fields = [
-                FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
+                FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=auto_id),
                 FieldSchema(name="vec", dtype=DataType.FLOAT_VECTOR, dim=self.dim)
             ]
             schema = CollectionSchema(fields=fields, description="vector collection")
@@ -283,10 +286,20 @@ class MilvusDAO:
         result = self.collection.insert([vectors])
         return result.primary_keys
 
-    def search(self, query_vectors: list, top_k: int = 1, nprobe: int = 10):
+    def add_with_ids(self, ids: list, vectors: list):
+        """
+        显式指定 ID 插入向量，仅适用于 auto_id=False 的集合
+        :param ids: 主键 ID 列表
+        :param vectors: 向量数据列表
+        :return: 插入后的主键列表
+        """
+        result = self.collection.insert([ids, vectors])
+        return result.primary_keys
+
+    def search(self, query_vector: list, top_k: int = 1, nprobe: int = 10):
         """
         搜索最相近的向量
-        :param query_vectors: 查询向量
+        :param query_vector: 查询向量
         :param top_k: 返回最相似的前 k 个结果
         :param nprobe: 搜索参数 nprobe（影响搜索准确性和速度）
         :return: 搜索结果列表
@@ -296,7 +309,7 @@ class MilvusDAO:
             "params": {
                 "nprobe": nprobe}}
         results = self.collection.search(
-            data=[query_vectors],
+            data=[query_vector],
             anns_field="vec",
             param=search_params,
             limit=top_k,
@@ -304,7 +317,7 @@ class MilvusDAO:
         )
         return results
 
-    def delete_by_id(self, id_to_delete: int) -> bool:
+    def delete_by_id(self, id_to_delete: Union[int, str]) -> bool:
         """
         根据主键删除数据
         :param id_to_delete: 需要删除的 ID

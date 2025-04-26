@@ -39,3 +39,9 @@ class PaddleSpeechRecognition:
             device=paddle.get_device())
         # text = self.text_executor(text=text)
         return text
+
+
+if __name__ == '__main__':
+    from ui_runner import FileDropApp
+
+    FileDropApp(PaddleSpeechRecognition().recognize).run()

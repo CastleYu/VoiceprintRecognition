@@ -5,7 +5,7 @@
 
 from sqlalchemy import QueuePool
 
-from ._dao import MySQLDAO, Base
+from ._dao import MySQLDAO, SQLiteDAO, SQLDAO
 from .model import User, Command
 
 DEBUG = False
@@ -20,8 +20,8 @@ class ConnectPoolConfig:
 
 
 class SQLClient:
-    command: MySQLDAO
-    user: MySQLDAO
+    command: SQLDAO
+    user: SQLDAO
 
     def add_command(self, command, label="LAUNCH"):
         self.command.add(Command(action=command, label=label))
@@ -77,3 +77,18 @@ class MySQLClient(SQLClient):
         self.command.connect(**key_dict)
 
 
+class SQLiteClient(SQLClient):
+    command: SQLiteDAO
+    user: SQLiteDAO
+
+    def __init__(self, database: str = "default.db", echo: bool = False):
+        self.user = SQLiteDAO(User)
+        self.command = SQLiteDAO(Command)
+
+        conn_args = {
+            "database": database,
+            "echo": echo
+        }
+
+        self.user.connect(**conn_args)
+        self.command.connect(**conn_args)

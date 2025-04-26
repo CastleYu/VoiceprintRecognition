@@ -22,5 +22,6 @@ class Command(Base):
 
 
 class VoicePrint(Schema):
+    __collection_name__ = "voiceprint"
     id = FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True)
     vec = FieldSchema(name="vec", dtype=DataType.FLOAT_VECTOR, dim=192)

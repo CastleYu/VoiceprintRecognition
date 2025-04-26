@@ -3,7 +3,6 @@ import sys
 import numpy as np
 import paddle
 from paddlespeech.cli.vector import VectorExecutor
-from PyQt5 import QtWidgets, QtCore
 
 import config
 from audio.deep_speaker.audio import read_mfcc
@@ -12,9 +11,7 @@ from audio.deep_speaker.constants import SAMPLE_RATE, NUM_FRAMES
 from audio.deep_speaker.conv_models import DeepSpeakerModel
 from audio.deep_speaker.test import batch_cosine_similarity
 
-version = paddle.__version__
-if version != '2.4.1':
-    raise RuntimeError(f"Paddle版本不正确，期望为2.4.1，实际为{version}")
+
 
 
 class SpeakerVerificationAdapter:
