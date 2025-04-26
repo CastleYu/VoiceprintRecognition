@@ -7,13 +7,42 @@ from tqdm import tqdm
 from sklearn.model_selection import KFold
 from audio.vector import PaddleSpeakerVerification, SpeakerVerificationAdapter
 import evaluate as eval_metric
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 
 # 配置日志记录
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+def setup_logger():
+    # 创建logs目录（如果不存在）
+    log_dir = os.path.join(os.path.dirname(__file__), 'logs')
+    os.makedirs(log_dir, exist_ok=True)
+
+    # 设置日志文件路径
+    log_file = os.path.join(log_dir, 'speaker_verification.log')
+
+    # 创建logger
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+
+    # 创建文件处理器，设置utf-8编码
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setLevel(logging.INFO)
+
+    # 创建控制台处理器
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+
+    # 创建格式器
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+
+    # 添加处理器到logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+    return logger
+
+logger = setup_logger()
 
 def set_seed(seed=123):
     np.random.seed(seed)
@@ -37,8 +66,8 @@ class SpeakerVerificationSystem:
     def compare_pair(self, audio_path1, audio_path2):
         """比较两个音频的相似度"""
         logger.debug(f"比较音频对: {audio_path1} 和 {audio_path2}")
-        emb1 = self.paddleVector.get_embedding(audio_path1)
-        emb2 = self.paddleVector.get_embedding(audio_path2)
+        emb1 = self.paddleVector.get_embedding_from_file(audio_path1)
+        emb2 = self.paddleVector.get_embedding_from_file(audio_path2)
         if emb1 is None or emb2 is None:
             logger.warning("无法提取一个或两个音频的嵌入向量，返回默认相似度0.0")
             return 0.0
@@ -140,8 +169,114 @@ def generate_test_pairs(data_dir: str, max_samples_per_speaker: int = 10) -> Tup
 
     logger.info(f"生成样本统计 | 总数: {len(test_pairs)} | 正样本: {sum(labels)} | 负样本: {len(labels)-sum(labels)}")
     return list(test_pairs), np.array(labels)
+import json
 
-def main(data_dir=r"P:/xiangmu/python/Voice/Data/test"):
+def load_progress():
+    """加载已保存的进度"""
+    progress_file = os.path.join(os.path.dirname(__file__), 'progress.json')
+    if os.path.exists(progress_file):
+        try:
+            with open(progress_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"加载进度文件失败: {str(e)}")
+    return {}
+
+def save_progress(progress_data):
+    """保存进度到文件"""
+    progress_file = os.path.join(os.path.dirname(__file__), 'progress.json')
+    try:
+        with open(progress_file, 'w', encoding='utf-8') as f:
+            json.dump(progress_data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"保存进度文件失败: {str(e)}")
+
+def parallel_compare(verifier, test_pairs, max_workers=4):
+    """
+    并行计算音频相似度矩阵，支持断点继续
+
+    参数:
+        verifier: 声纹验证器实例，需实现compare_pair方法
+        test_pairs: 音频路径对的列表，如 [("path1.wav", "path2.wav"), ...]
+        max_workers: 最大并行线程数
+
+    返回:
+        np.ndarray: 相似度结果数组
+    """
+    # 加载已保存的进度
+    progress = load_progress()
+
+    # 预分配结果数组
+    sims = np.zeros(len(test_pairs), dtype=np.float32)
+
+    # 恢复已计算的结果
+    completed_pairs = 0
+    for idx, pair in enumerate(test_pairs):
+        pair_key = f"{pair[0]}|||{pair[1]}"
+        if pair_key in progress:
+            sims[idx] = progress[pair_key]
+            completed_pairs += 1
+
+    if completed_pairs > 0:
+        logger.info(f"已从断点恢复 {completed_pairs} 个结果")
+
+    def _process_pair(idx, pair):
+        """处理单个音频对的内部函数"""
+        pair_key = f"{pair[0]}|||{pair[1]}"
+
+        # 如果已经处理过，直接返回缓存的结果
+        if pair_key in progress:
+            return idx, progress[pair_key]
+
+        try:
+            # 输入验证
+            if not all(os.path.exists(p) for p in pair):
+                logger.warning(f"文件缺失: {pair[0]} 或 {pair[1]}")
+                return idx, 0.0
+
+            # 核心计算
+            similarity = verifier.compare_pair(pair[0], pair[1])
+
+            # 结果验证
+            if not isinstance(similarity, (float, int)) or not 0 <= similarity <= 1:
+                logger.error(f"无效相似度值: {similarity} (应为[0,1]区间)")
+                return idx, 0.0
+
+            # 保存进度
+            progress[pair_key] = similarity
+            if len(progress) % 50 == 0:  # 每处理100对音频保存一次进度
+                save_progress(progress)
+
+            return idx, similarity
+
+        except Exception as e:
+            logger.error(f"处理失败: {pair} | 错误: {str(e)}")
+            return idx, 0.0
+
+    # 只处理未完成的音频对
+    remaining_pairs = [(idx, pair) for idx, pair in enumerate(test_pairs)
+                      if f"{pair[0]}|||{pair[1]}" not in progress]
+
+    if remaining_pairs:
+        # 并行处理
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 提交所有任务
+            futures = [executor.submit(_process_pair, idx, pair)
+                      for idx, pair in remaining_pairs]
+
+            # 使用tqdm进度条（实时更新模式）
+            for future in tqdm(as_completed(futures),
+                             total=len(futures),
+                             desc="并行计算相似度",
+                             unit="pair"):
+                idx, result = future.result()
+                sims[idx] = result
+
+        # 最后保存一次进度
+        save_progress(progress)
+
+    return sims
+def main(data_dir=r"P:\xiangmu\python\middle_duration\middle_duration"):
     try:
         set_seed()
         # 初始化验证系统
@@ -156,11 +291,11 @@ def main(data_dir=r"P:/xiangmu/python/Voice/Data/test"):
         # 2. 计算相似度矩阵（带进度条）
         sims = []
         logger.info("开始计算相似度矩阵...")
-        for pair in tqdm(test_pairs, desc="处理音频对"):
-            similarity = verifier.compare_pair(pair[0], pair[1])
-            sims.append(similarity)
-        sims = np.array(sims)
-
+        # for pair in tqdm(test_pairs, desc="处理音频对"):
+        #     similarity = verifier.compare_pair(pair[0], pair[1])
+        #     sims.append(similarity)
+        # sims = np.array(sims)
+        sims = parallel_compare(verifier, test_pairs, max_workers=10)
         # 3. 评估性能
         logger.info("\n评估结果：")
         fm, tpr, acc, eer = eval_metric.evaluate(sims, labels)
@@ -183,4 +318,4 @@ def main(data_dir=r"P:/xiangmu/python/Voice/Data/test"):
         logging.shutdown()
 
 if __name__ == "__main__":
-    main()
+    main(data_dir=r"P:\xiangmu\python\Voice\Data\test")
