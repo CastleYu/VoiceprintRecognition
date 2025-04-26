@@ -190,7 +190,7 @@ class SQLDAO(DAOBase, Generic[T]):
         return self
 
 
-class MySQLDAO(SQLDAO):
+class MySQLDAO(SQLDAO[T], Generic[T]):
     """
     一个表对应一个ORM模型对应一个DAO
     """
@@ -217,7 +217,7 @@ class MySQLDAO(SQLDAO):
         return self
 
 
-class SQLiteDAO(SQLDAO):
+class SQLiteDAO(SQLDAO[T], Generic[T]):
     def connect(self, database: str = "default.db", echo: bool = False) -> "SQLiteDAO[T]":
         DB_URL = f"sqlite:///./{database}"
         self.engine: Engine = create_engine(DB_URL, connect_args={
