@@ -21,7 +21,8 @@ class MySQL:
 
 class Algorithm:
     threshold = 0.8
-
+    low_text_threshold: 6      # 低文本量阈值（字符数）
+    high_text_threshold: 12  # 高文本量阈值（字符数）
 
 class Model:
     ModelDir = os.path.abspath(os.path.join(ROOT_DIR, 'action', 'bert_models'))

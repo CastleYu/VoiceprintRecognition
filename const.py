@@ -1,3 +1,4 @@
 SUCCESS = 'Success'
 FAILED = 'Failed'
 ALLOWED_EXTENSIONS = {'wav'}
+HIGH_PRECISION_THRESHOLD = 0.85  # 高精度阈值
