@@ -20,8 +20,8 @@ class ConnectPoolConfig:
 
 
 class SQLClient:
-    command: SQLDAO
-    user: SQLDAO
+    command: SQLDAO[Command]
+    user: SQLDAO[User]
 
     def add_command(self, command, label="LAUNCH"):
         self.command.add(Command(action=command, label=label))
@@ -44,6 +44,9 @@ class SQLClient:
 
     def del_user(self, id_):
         self.user.delete(self.user.get_one(id=id_))
+
+    def get_user_by_voiceprint(self, voiceprint) -> User:
+        return self.user.get_one(voiceprint=voiceprint)
 
     def get_user_by_id(self, id_) -> User:
         return self.user.get_one(id=id_)
@@ -78,8 +81,8 @@ class MySQLClient(SQLClient):
 
 
 class SQLiteClient(SQLClient):
-    command: SQLiteDAO
-    user: SQLiteDAO
+    command: SQLiteDAO[Command]
+    user: SQLiteDAO[User]
 
     def __init__(self, database: str = "default.db", echo: bool = False):
         self.user = SQLiteDAO(User)
