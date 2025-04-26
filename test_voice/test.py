@@ -3,19 +3,27 @@ from storage import VoiceprintStorage
 from faker import Faker
 import random
 import os
+import sys
 from pathlib import Path
 import librosa
 import soundfile as sf
-from deep_speaker.audio import read_mfcc
-from deep_speaker.batcher import sample_from_mfcc
-from deep_speaker.constants import SAMPLE_RATE, NUM_FRAMES
-from deep_speaker.conv_models import DeepSpeakerModel
-from deep_speaker.test import batch_cosine_similarity
 import logging
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
+import config
+
+SAMPLE_RATE = 16000  # Standard sample rate for voice processing
+from audio.vector import PaddleSpeakerVerification, SpeakerVerificationAdapter, DeepSpeakerVerification
+from const import SUCCESS, FAILED
+from dao import *
+from utils.audioU import pre_process
+
+ACCURACY_THRESHOLD = config.Algorithm.threshold
+LOW_TEXT_CHARACTER_LIMIT = config.Algorithm.low_text_threshold
+HIGH_TEXT_CHARACTER_LIMIT = config.Algorithm.high_text_threshold
 
 # 输入目录路径
-input_dir = r"F:\Data\extracted_normal_speed_files_backup\backup"
-
+input_dir = r"P:\xiangmu\python\Voice\Data\testOri"
 # 配置日志
 input_dir_name = os.path.basename(input_dir)
 log_filename = f'test_{input_dir_name}.log'
@@ -36,15 +44,12 @@ random.seed(42)
 # 初始化存储类
 storage = VoiceprintStorage()
 
+#初始化模型
+paddleVector = SpeakerVerificationAdapter(PaddleSpeakerVerification())
+deep_speakerVector = SpeakerVerificationAdapter(DeepSpeakerVerification())
+
 # 初始化 Faker
 fake = Faker()
-
-
-# 初始化模型
-model = DeepSpeakerModel()
-model.m.load_weights('ResCNN_triplet_training_checkpoint_265.h5', by_name=True)
-logger.info('模型加载完成，权重文件：ResCNN_triplet_training_checkpoint_265.h5')
-
 
 
 # 获取所有说话人及其音频文件
@@ -52,18 +57,31 @@ speaker_audio_map = {}
 for audio_file in Path(input_dir).rglob('*.wav'):
     stem = audio_file.stem
     parts = stem.split('_')
-    
-    if len(parts) == 2:
-        speaker = parts[0]
-    elif len(parts) == 3 and parts[0] == 'speaker':
-        speaker = parts[1]
-    elif len(parts) >= 4 and parts[0].startswith('F'):
-        speaker = parts[0]
-    elif '-' in stem:
-        speaker = stem.split('-')[0]
+
+    # 尝试从父目录名中提取说话人(格式:数字_姓名)
+    parent_dir = audio_file.parent.name
+    if '_' in parent_dir:
+        dir_parts = parent_dir.split('_')
+        if len(dir_parts) == 2 and dir_parts[0].isdigit():
+            speaker = dir_parts[1]
+        else:
+            speaker = None
     else:
-        continue
-    
+        speaker = None
+
+    # 如果无法从目录名提取，尝试从文件名提取
+    if speaker is None:
+        if len(parts) == 2:
+            speaker = parts[0]
+        elif len(parts) == 3 and parts[0] == 'speaker':
+            speaker = parts[1]
+        elif len(parts) >= 4 and parts[0].startswith('F'):
+            speaker = parts[0]
+        elif '-' in stem:
+            speaker = stem.split('-')[0]
+        else:
+            continue
+
     if speaker not in speaker_audio_map:
         speaker_audio_map[speaker] = []
     speaker_audio_map[speaker].append(audio_file)
@@ -73,17 +91,17 @@ def concatenate_audio(audio_files):
     """拼接多个音频文件为一个音频信号，并保存为临时文件"""
     from pydub import AudioSegment
     import tempfile
-    
+
     combined = AudioSegment.empty()
     for file in audio_files:
         audio = AudioSegment.from_file(file)
         combined += audio
-    
+
     # 生成临时文件
     temp_file = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
     combined.export(temp_file.name, format="wav")
     temp_file.close()
-    
+
     return temp_file.name
 
 # 从每个说话人中选取音频文件进行拼接
@@ -92,14 +110,14 @@ for speaker, audio_files in speaker_audio_map.items():
     if storage.get_user_by_name(speaker):
         print(f'Speaker {speaker} already exists in the database. Skipping.')
         continue
-    
+
     while True:
         selected_files = random.sample(audio_files, min(3, len(audio_files)))  # 最多选择3个文件
         temp_audio_path = concatenate_audio(selected_files)
-        
+
         # 计算拼接后的音频时长
         duration = librosa.get_duration(filename=temp_audio_path)
-        
+
         # 如果时长在5~6秒之间，则继续处理
         if 6 <= duration <= 8:
             break
@@ -114,13 +132,14 @@ for speaker, audio_files in speaker_audio_map.items():
             signal = signal[:max_samples]
             sf.write(temp_audio_path, signal, SAMPLE_RATE)
             break
-    
-    mfcc = sample_from_mfcc(read_mfcc(temp_audio_path, SAMPLE_RATE), NUM_FRAMES)
-    embedding_512 = model.m.predict(np.expand_dims(mfcc, axis=0))[0].tolist() # 假设模型输出为512维
-    embedding_189 = [random.random() for _ in range(189)]  # 随机生成189维向量
+
+    # 处理音频文件
+    pro_path = pre_process(temp_audio_path)
+    emb_192 = np.array(paddleVector.get_embedding_from_file(pro_path), dtype=np.float32)
+    emb_512 = deep_speakerVector.get_embedding_from_file(pro_path)
 
     # 添加声纹向量
-    index_id_189, index_id_512 = storage.add_voiceprint(embedding_189, embedding_512)
+    index_id_189, index_id_512 = storage.add_voiceprint(emb_192, emb_512)
     logger.info(f'说话人 {speaker} 的声纹向量已添加，ID: {index_id_189}, {index_id_512}')
 
     # 添加用户信息
@@ -147,7 +166,7 @@ predicted_labels = []
 similarity_scores = []
 
 # 新增参数：验证比例，默认为1（抽取一条音频）
-verification_ratio = 1   # 支持设置为0.1~1.0的比例
+verification_ratio = 1.0   # 支持设置为0.1~1.0的比例
 
 for speaker in speaker_audio_map.keys():
     # 从`save_audio_info`中读取已用于录入的文件
@@ -156,51 +175,75 @@ for speaker in speaker_audio_map.keys():
     all_files = speaker_audio_map[speaker]
     # 如果`saved_files`不为空，则排除已用于录入的文件
     verification_files = all_files if not saved_files else [f for f in all_files if str(f) not in saved_files]
-    
-    # 根据比例抽取验证文件
-    if verification_ratio == 0:
-        verification_file = random.choice(verification_files)
-        logger.info(f'验证说话人 {speaker}，使用文件: {verification_file}')
-        
-        mfcc = sample_from_mfcc(read_mfcc(verification_file, SAMPLE_RATE), NUM_FRAMES)
-        embedding_512 = model.m.predict(np.expand_dims(mfcc, axis=0))
+
+    def process_verification_file(verification_file):
+        """处理单个验证文件"""
+        y, sr = librosa.load(verification_file, sr=None)
+        duration = librosa.get_duration(y=y, sr=sr)
+        text_estimate = duration * (110 / 60)  # 取中间值110字/min
+
+        pro_path = pre_process(verification_file)
+
+        # 根据文本量决定模型组合
+        use_paddle = text_estimate >= LOW_TEXT_CHARACTER_LIMIT
+        use_deep = text_estimate <= HIGH_TEXT_CHARACTER_LIMIT
+
+        # 获取音频嵌入向量
+        paddle_embedding = paddleVector.get_embedding_from_file(pro_path) if use_paddle else None
+        deep_embedding = deep_speakerVector.get_embedding_from_file(pro_path) if use_deep else None
 
         # 查询声纹向量
-        distances_512, indices_512, vectors_512 = storage.search_voiceprint_512(embedding_512[0].tolist())
+        distances_192, indices_192, vectors_192 = (storage.search_voiceprint_192(paddle_embedding)
+                                          if use_paddle else (None, None, None))
+        distances_512, indices_512, vectors_512 = (storage.search_voiceprint_512(deep_embedding)
+                                          if use_deep else (None, None, None))
 
+        similarity_score = 0.0
+        user_info = None
         # 计算余弦相似度
-        similarity_512 = batch_cosine_similarity(embedding_512, vectors_512)
-        similarity_scores.append(similarity_512[0])
-        
-        # 反查说话人信息
-        user_info = storage.get_user_by_index_id_512(int(indices_512[0][0]))
-        logger.info(f'说话人 {speaker} 的声纹向量查询完成，相似度: {similarity_512[0]:.4f}, 用户信息: {user_info[1]}, 音频文件为：{verification_file}')
-        # 记录真实标签和预测标签
+        if use_paddle and use_deep:
+            # 使用两种模型的情况
+            paddle_match = paddleVector.get_embeddings_score(
+                vectors_192.squeeze(), paddle_embedding) >= ACCURACY_THRESHOLD
+            deep_match = deep_speakerVector.get_embeddings_score(
+               vectors_512,deep_embedding)[0] >= ACCURACY_THRESHOLD
+
+            recognize_result = SUCCESS if paddle_match or deep_match else FAILED
+
+            if recognize_result == SUCCESS:
+                user_info = storage.get_user_by_index_id_192(int(indices_192[0][0])) if paddle_match else storage.get_user_by_index_id_512(int(indices_512[0][0]))
+                similarity_score = max(
+                    paddleVector.get_embeddings_score(
+                        vectors_192.squeeze(), paddle_embedding) if paddle_match else 0,
+                    deep_speakerVector.get_embeddings_score(
+                        vectors_512, deep_embedding)[0] if deep_match else 0
+                )
+        elif use_paddle:
+            # 仅使用paddle模型
+            similarity_score = paddleVector.get_embeddings_score(
+               vectors_192.squeeze(), paddle_embedding)
+            recognize_result = SUCCESS if similarity_score >= ACCURACY_THRESHOLD else FAILED
+            user_info = storage.get_user_by_index_id_192(int(indices_192[0][0]))
+        elif use_deep:
+            # 仅使用deep模型
+            similarity_score = deep_speakerVector.get_embeddings_score(
+                vectors_512, deep_embedding)[0]
+            recognize_result = SUCCESS if similarity_score>= ACCURACY_THRESHOLD else FAILED
+            user_info = storage.get_user_by_index_id_512(int(indices_512[0][0]))
+
+        logger.info(f'说话人 {speaker} 的声纹向量查询完成，相似度: {similarity_score:.4f}, 用户信息: {user_info[1]}, 音频文件为：{verification_file}')
+        return similarity_score, user_info
+
+    # 按比例抽取验证文件
+    num_files_to_verify = max(1, int(len(verification_files) * verification_ratio))
+    selected_files = random.sample(verification_files, num_files_to_verify)
+    logger.info(f'验证说话人 {speaker}，使用文件: {selected_files}')
+
+    for verification_file in selected_files:
+        similarity_score, user_info = process_verification_file(verification_file)
+        similarity_scores.append(similarity_score)
         true_labels.append(speaker)
         predicted_labels.append(user_info[1])
-    else:
-        # 按比例抽取验证文件
-        num_files_to_verify = max(1, int(len(verification_files) * verification_ratio))
-        selected_files = random.sample(verification_files, num_files_to_verify)
-        logger.info(f'验证说话人 {speaker}，使用文件: {selected_files}')
-        
-        for verification_file in selected_files:
-            mfcc = sample_from_mfcc(read_mfcc(verification_file, SAMPLE_RATE), NUM_FRAMES)
-            embedding_512 = model.m.predict(np.expand_dims(mfcc, axis=0))
-
-            # 查询声纹向量
-            distances_512, indices_512, vectors_512 = storage.search_voiceprint_512(embedding_512[0].tolist())
-
-            # 计算余弦相似度
-            similarity_512 = batch_cosine_similarity(embedding_512, vectors_512)
-            similarity_scores.append(similarity_512[0])
-            
-            # 反查说话人信息
-            user_info = storage.get_user_by_index_id_512(int(indices_512[0][0]))
-            logger.info(f'说话人 {speaker} 的声纹向量查询完成，相似度: {similarity_512[0]:.4f}, 用户信息: {user_info[1]}, 音频文件为：{verification_file}')
-            # 记录真实标签和预测标签
-            true_labels.append(speaker)
-            predicted_labels.append(user_info[1])
 
 # 计算评价指标
 accuracy = accuracy_score(true_labels, predicted_labels)
@@ -219,7 +262,7 @@ for threshold in thresholds:
     frr = 0
     total_imposter = 0
     total_genuine = 0
-    
+
     for i in range(len(true_labels)):
         if true_labels[i] != predicted_labels[i]:
             total_imposter += 1
@@ -229,12 +272,12 @@ for threshold in thresholds:
             total_genuine += 1
             if similarity_scores[i] < threshold:
                 frr += 1
-    
+
     if total_imposter > 0:
         far_list.append(far / total_imposter)
     else:
         far_list.append(0)
-    
+
     if total_genuine > 0:
         frr_list.append(frr / total_genuine)
     else:
