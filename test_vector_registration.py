@@ -82,7 +82,7 @@ def test_vector_registration(audio_file_path, username="test_user", permission_l
 
 if __name__ == '__main__':
     # 测试用例
-    test_audio_file = r"P:\xiangmu\python\Voice\Data\test\21_蔡培\[2025-03-03][18-41-22].wav"  # 替换为实际测试音频文件路径
+    test_audio_file = r"P:\xiangmu\python\Voice\VoiceprintRecognition\注册.wav"  # 替换为实际测试音频文件路径
     result = test_vector_registration(test_audio_file)
     print("\nTest Result:")
     print(json.dumps(result, indent=2, ensure_ascii=False))

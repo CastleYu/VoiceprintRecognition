@@ -454,7 +454,7 @@ def wake():
 
     print(f"接收到的唤醒文本: {wake_text}")
     print(f"接收到的文件路径: {file_path}")
-    wake_text = "打开报表"
+    wake_text = "四二九九八一四四六五六"
     file_path = r'P:\xiangmu\python\Voice\test11.wav'
     print(file_path)
     try:
