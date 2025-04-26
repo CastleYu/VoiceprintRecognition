@@ -13,7 +13,7 @@ from config import AUDIO_TABLE, UPLOAD_FOLDER, ROOT_DIR
 from const import SUCCESS, FAILED
 from dao import *
 from utils.audioU import pre_process
-from utils.fileU import check_file_in_request, save_file, create_path
+from utils.fileU import check_file_in_request, save_file, create_abs_path, create_path
 from utils.responseU import QuickResponse as qr
 
 app = Flask(__name__)

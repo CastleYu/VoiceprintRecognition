@@ -37,8 +37,9 @@ def save_file(file, upload_folder):
     return file_path
 
 
-def create_path(*path):
+def create_abs_path(*path):
     return os.path.abspath(os.path.join(*path))
 
 
-
+def create_path(*path):
+    return os.path.join(*path)
