@@ -499,7 +499,7 @@ def wake():
                 # 根据相似度评分确定识别结果
                 print(f'{similarity_score} > {ACCURACY_THRESHOLD} = {similarity_score >= ACCURACY_THRESHOLD}')
                 if similarity_score >= ACCURACY_THRESHOLD:
-                    user = mysql_client.get_user_by_id(voiceprint)
+                    user = mysql_client.get_user_by_voiceprint(voiceprint)
                     wake_result = SUCCESS
                     response = qr.result(
                         wake_result,

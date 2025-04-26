@@ -76,7 +76,7 @@ def test_wake(audio_file_path, wake_text=TEST_WAKE_TEXT):
             return qr.error("声纹相似度不足")
         # 获取用户信息
         voiceprint_id = str(search_results[0][0].id)
-        user = mysql_client.get_user_by_id(voiceprint_id)
+        user = mysql_client.get_user_by_voiceprint(voiceprint_id)
         if not user:
             return qr.error("未找到对应用户")
 

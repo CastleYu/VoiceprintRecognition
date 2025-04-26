@@ -114,7 +114,7 @@ def test_audio_recognition(audio_file_path):
         user_name = 'None'
         permission_level = 0
         if recognize_result == "SUCCESS":
-            user = mysql_client.get_user_by_id('['+VoicePrint_id+']')
+            user = mysql_client.get_user_by_voiceprint('['+VoicePrint_id+']')
             if user:
                 user_name = user.username
                 permission_level = user.permission_level
