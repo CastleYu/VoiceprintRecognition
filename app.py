@@ -1,4 +1,3 @@
-import os.path
 import traceback
 
 from flask import Flask, request, redirect, flash, jsonify
@@ -8,7 +7,7 @@ import config
 from action.action_matcher import *
 from action.intent_recg import IntentRecognition
 from audio.asr import PaddleSpeechRecognition, SpeechRecognitionAdapter
-from audio.vector import PaddleSpeakerVerification, SpeakerVerificationAdapter
+from audio.vector import PaddleSpeakerVerification, SpeakerVerificationAdapter, DeepSpeakerVerification
 from config import AUDIO_TABLE, UPLOAD_FOLDER, ROOT_DIR
 from const import SUCCESS, FAILED
 from dao import *
@@ -31,6 +30,7 @@ sqlite_client = SQLiteClient(create_path("data", "database.db"), False)
 sql_client = mysql_client
 paddleASR = SpeechRecognitionAdapter(PaddleSpeechRecognition())
 paddleVector = SpeakerVerificationAdapter(PaddleSpeakerVerification())
+deep_speakerVector = SpeakerVerificationAdapter(DeepSpeakerVerification)  # 初始化deep speaker模型
 
 action_matcher = InstructionMatcher(MODELS_DIR).load(MicomlMatcher('paraphrase-multilingual-MiniLM-L12-v2'))
 intent_recognizer = IntentRecognition(
@@ -83,16 +83,25 @@ def load():
         file_paths.append(file_path)
 
     try:
-        audio_embs = []
+        audio_embs_192 = []
+        audio_embs_512 = []
         for file_path in file_paths:
             pro_path = pre_process(file_path)
-            audio_emb = paddleVector.get_embedding_from_file(pro_path)
-            audio_embs.append(audio_emb)
-        audio_embs_array = np.array(audio_embs)
-        average_emb = np.mean(audio_embs_array, axis=0)
+            # 生成192维向量
+            emb_192 = paddleVector.get_embedding_from_file(pro_path)
+            audio_embs_192.append(emb_192)
+            # 生成512维向量 (使用deep speaker模型)
+            emb_512 = deep_speakerVector.get_embedding_from_file(pro_path)  # 假设模型有get_embedding方法
+            audio_embs_512.append(emb_512)
 
-        # 将特征向量插入 Milvus 并获取 ID
-        milvus_ids = milvus_client.insert(AUDIO_TABLE, [average_emb.tolist()])
+        # 计算平均向量
+        average_192 = np.mean(np.array(audio_embs_192), axis=0)
+        average_512 = np.mean(np.array(audio_embs_512), axis=0)
+
+        # 将192维特征向量插入 Milvus 并获取 ID
+        milvus_ids = milvus_client.insert(AUDIO_TABLE, [average_192.tolist()])
+        # 将512维特征向量插入到deepSpeaker_vp512集合，使用相同ID
+        milvus_client.insert_with_ids("deepSpeaker_vp512", milvus_ids, [average_512])
 
         # 将 ID 和音频信息存储到 MySQL
         username = request.form.get('username')
@@ -199,8 +208,7 @@ def asr():
     return jsonify(response)
 
 
-# @app.route('/recognize', methods=['POST'])
-@app.route('/recognizeAudioPrint', methods=['POST'])
+@app.route('/recognize', methods=['POST'])
 def recognize():
     # 检查请求中的文件是否有效
     is_valid, message, files = check_file_in_request(request)
@@ -275,6 +283,77 @@ def recognize():
     return jsonify(response)
 
 
+@app.route('/recognizeAudioPrint', methods=['POST'])
+def recognizeAudioPrint():
+    # 检查请求中的文件是否有效
+    is_valid, message, files = check_file_in_request(request)
+    if not is_valid:
+        flash(message)
+        return redirect(request.url)
+
+    # 保存文件到指定路径
+    file_path = save_file(files[0], UPLOAD_FOLDER)
+    print(file_path)
+    file_path = r'P:\xiangmu\python\Voice\opendoor.wav'
+    try:
+        pro_path = pre_process(file_path)
+        # 获取音频嵌入向量
+        audio_embedding = paddleVector.get_embedding_from_file(pro_path)
+
+        # 在 Milvus 中搜索相似音频
+        search_results = milvus_client.search(AUDIO_TABLE, audio_embedding, top_k=1)
+        user_name = 'None'
+        similar_distance = '0'
+        similarity_score = '0'
+        recognize_result = FAILED
+        user_id = '0'
+
+        if search_results:
+            user_id = str(search_results[0][0].id)
+            user = sql_client.get_user_by_id(user_id)
+            user_name = user.username
+            permission_level = user.permission_level
+            similar_distance = search_results[0][0].distance
+            similar_vector = np.array(search_results[0][0].entity.vec, dtype=np.float32)
+
+            # 计算相似度评分
+            similarity_score = paddleVector.get_embeddings_score(similar_vector, audio_embedding)
+
+            # 根据相似度评分确定识别结果
+            if similarity_score >= ACCURACY_THRESHOLD:
+                recognize_result = SUCCESS
+                response = qr.result(
+                    recognize_result,
+                    username=user_name,
+                    user_id=user_id,
+                    permission_level=permission_level,
+                    similar_distance=similar_distance,
+                    similarity_score=similarity_score
+                )
+            else:
+                response = qr.result(
+                    recognize_result,
+                    username=user_name,
+                    user_id=user_id,
+                    permission_level=permission_level,
+                    similar_distance=similar_distance,
+                    similarity_score=similarity_score,
+                    error='相似度不够'
+                )
+        else:
+            response = qr.error('未找到近似声纹')
+        # 构建响应
+
+    except Exception as e:
+        traceback.print_exc()
+        response = qr.error(e)
+    finally:
+        # 删除临时文件
+        os.remove(file_path)
+
+    return jsonify(response)
+
+
 @app.route('/wake', methods=['POST'])
 def wake():
     file = request.files.get('file')
@@ -311,6 +390,9 @@ def wake():
 
             if search_results:
                 user_id = str(search_results[0][0].id)
+                #获取用户名字
+                user = sql_client.get_user_by_id(user_id)
+                print(user)
                 similar_vector = np.array(search_results[0][0].entity.vec, dtype=np.float32)
 
                 # 计算相似度评分

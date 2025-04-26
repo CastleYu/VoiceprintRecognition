@@ -12,8 +12,8 @@ from action.action_matcher import *
 from audio.asr import PaddleSpeechRecognition, SpeechRecognitionAdapter
 from audio.vector import PaddleSpeakerVerification, SpeakerVerificationAdapter
 from config import AUDIO_TABLE, USER_TABLE
-from dao.milvus_dao import MilvusClient
-from dao.mysql_dao import MySQLClient
+from dao import MilvusClient
+from dao import MySQLClient
 from utils.audioU import pre_process
 
 ACCURACY_THRESHOLD = config.Algorithm.threshold
