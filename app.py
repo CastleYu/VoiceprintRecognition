@@ -19,7 +19,7 @@ from action.intent_recg import IntentRecognition
 from audio.asr import PaddleSpeechRecognition, SpeechRecognitionAdapter
 from audio.vector import PaddleSpeakerVerification, SpeakerVerificationAdapter, DeepSpeakerVerification
 from config import AUDIO_TABLE, UPLOAD_FOLDER, ROOT_DIR
-from const import SUCCESS, FAILED,HIGH_PRECISION_THRESHOLD
+from const import SUCCESS, FAILED, HIGH_PRECISION_THRESHOLD
 from dao import *
 from utils.audioU import pre_process
 from utils.fileU import check_file_in_request, save_file, create_abs_path, create_path
@@ -131,11 +131,11 @@ def load():
 
             # 取片段的一部分(至少1秒)
             take_samples = min(seg_samples, remaining_space,
-                              max(int(seg['sr']), remaining_space//2))
+                               max(int(seg['sr']), remaining_space // 2))
 
             start = random.randint(0, max(0, seg_samples - take_samples))
-            sampled_audio[current_pos:current_pos+take_samples] = \
-                seg['data'][start:start+take_samples]
+            sampled_audio[current_pos:current_pos + take_samples] = \
+                seg['data'][start:start + take_samples]
             current_pos += take_samples
 
         # 4. 保存采样后的音频
@@ -161,7 +161,7 @@ def load():
             user_id=new_user.id,
             voiceprint=milvus_ids[0],
             permission_level=permission_level,
-            actual_duration=current_pos/SAMPLE_RATE
+            actual_duration=current_pos / SAMPLE_RATE
         )
 
     except Exception as e:
@@ -193,7 +193,7 @@ def delete_user():
         return redirect(request.url)
 
     # 从MySQL中删除指令
-    user = sql_client.get_user_by_id(user_id)
+    user = sql_client.get_user_by_voiceprint(user_id)
     voiceprint_id = user.voiceprint if user else None
     milvus_client.delete_by_id(AUDIO_TABLE, voiceprint_id)
     sql_client.del_user(user_id)
@@ -227,7 +227,7 @@ def update_user():
     permission_level = int(request.form.get('permission_level'))
     user_id = int(request.form.get('id'))
 
-    user = sql_client.get_user_by_id(user_id)
+    user = sql_client.get_user_by_voiceprint(user_id)
     if user:
         user.username = username
         user.permission_level = permission_level
@@ -286,12 +286,12 @@ def recognize():
         similar_distance = '0'
         similarity_score = '0'
         recognize_result = FAILED
-        user_id = '0'
+        voiceprint = '0'
         asr_result = ''
 
         if search_results:
-            user_id = str(search_results[0][0].id)
-            user = sql_client.get_user_by_id(user_id)
+            voiceprint = str(search_results[0][0].id)
+            user = sql_client.get_user_by_voiceprint(voiceprint)
             user_name = user.username
             permission_level = user.permission_level
             similar_distance = search_results[0][0].distance
@@ -307,7 +307,7 @@ def recognize():
                 response = qr.result(
                     recognize_result,
                     username=user_name,
-                    user_id=user_id,
+                    user_id=voiceprint,
                     permission_level=permission_level,
                     similar_distance=similar_distance,
                     similarity_score=similarity_score,
@@ -318,7 +318,7 @@ def recognize():
                 response = qr.result(
                     recognize_result,
                     username=user_name,
-                    user_id=user_id,
+                    user_id=voiceprint,
                     permission_level=permission_level,
                     similar_distance=similar_distance,
                     similarity_score=similarity_score,
@@ -382,7 +382,8 @@ def recognizeAudioPrint():
             paddle_match = len(paddle_results) > 0 and paddleVector.get_embeddings_score(
                 np.array(paddle_results[0][0].entity.vec, dtype=np.float32), paddle_embedding) >= ACCURACY_THRESHOLD
             deep_match = len(deep_results) > 0 and deep_speakerVector.get_embeddings_score(
-                np.array(deep_results[0][0].entity.vec, dtype=np.float32)[np.newaxis, :], deep_embedding[np.newaxis, :]) >= ACCURACY_THRESHOLD
+                np.array(deep_results[0][0].entity.vec, dtype=np.float32)[np.newaxis, :],
+                deep_embedding[np.newaxis, :]) >= ACCURACY_THRESHOLD
 
             if ACCURACY_THRESHOLD < HIGH_PRECISION_THRESHOLD:
                 recognize_result = SUCCESS if paddle_match or deep_match else FAILED
@@ -393,9 +394,11 @@ def recognizeAudioPrint():
                 VoicePrint_id = str(paddle_results[0][0].id if paddle_match else deep_results[0][0].id)
                 similarity_score = max(
                     paddleVector.get_embeddings_score(
-                        np.array(paddle_results[0][0].entity.vec, dtype=np.float32), paddle_embedding) if paddle_match else 0,
+                        np.array(paddle_results[0][0].entity.vec, dtype=np.float32),
+                        paddle_embedding) if paddle_match else 0,
                     deep_speakerVector.get_embeddings_score(
-                        np.array(deep_results[0][0].entity.vec, dtype=np.float32)[np.newaxis, :], deep_embedding[np.newaxis, :]) if deep_match else 0
+                        np.array(deep_results[0][0].entity.vec, dtype=np.float32)[np.newaxis, :],
+                        deep_embedding[np.newaxis, :]) if deep_match else 0
                 )
         elif use_paddle:
             # 仅使用paddle模型
@@ -408,13 +411,14 @@ def recognizeAudioPrint():
             # 仅使用deep模型
             if len(deep_results) > 0:
                 similarity_score = deep_speakerVector.get_embeddings_score(
-                    np.array(deep_results[0][0].entity.vec, dtype=np.float32)[np.newaxis, :], deep_embedding[np.newaxis, :])
+                    np.array(deep_results[0][0].entity.vec, dtype=np.float32)[np.newaxis, :],
+                    deep_embedding[np.newaxis, :])
                 recognize_result = SUCCESS if similarity_score >= ACCURACY_THRESHOLD else FAILED
                 VoicePrint_id = str(deep_results[0][0].id)
 
         # 获取用户信息
         if recognize_result == SUCCESS:
-            user = sql_client.get_user_by_id(VoicePrint_id)
+            user = sql_client.get_user_by_voiceprint(VoicePrint_id)
             user_name = user.username
             permission_level = user.permission_level
             response = qr.result(
@@ -474,12 +478,12 @@ def wake():
             # 在 Milvus 中搜索相似音频
             search_results = milvus_client.search(AUDIO_TABLE, audio_embedding, top_k=1)
             similarity_score = '0'
-            user_id = '0'
+            voiceprint = '0'
 
             if search_results:
-                user_id = str(search_results[0][0].id)
-                #获取用户名字
-                user = sql_client.get_user_by_id(user_id)
+                voiceprint = str(search_results[0][0].id)
+                # 获取用户名字
+                user = sql_client.get_user_by_voiceprint(voiceprint)
                 print(user)
                 similar_vector = np.array(search_results[0][0].entity.vec, dtype=np.float32)
 
@@ -493,7 +497,7 @@ def wake():
                     response = qr.result(
                         wake_result,
                         recognized_text=asr_result,
-                        user_id=user_id,
+                        user_id=voiceprint,
                     )
                 else:
                     response = qr.result(
