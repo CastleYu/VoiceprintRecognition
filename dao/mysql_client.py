@@ -45,6 +45,9 @@ class SQLClient:
     def del_user(self, id_):
         self.user.delete(self.user.get_one(id=id_))
 
+    def get_user_by_voiceprint(self, voiceprint) -> User:
+        return self.user.get_one(voiceprint=voiceprint)
+
     def get_user_by_id(self, id_) -> User:
         return self.user.get_one(id=id_)
 
