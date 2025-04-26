@@ -466,8 +466,6 @@ def wake():
 
     print(f"接收到的唤醒文本: {wake_text}")
     print(f"接收到的文件路径: {file_path}")
-    wake_text = "四二九九八一四四六五六"
-    file_path = r'P:\xiangmu\python\Voice\test11.wav'
     print(file_path)
     try:
         pro_path = pre_process(file_path)
@@ -501,11 +499,12 @@ def wake():
                 # 根据相似度评分确定识别结果
                 print(f'{similarity_score} > {ACCURACY_THRESHOLD} = {similarity_score >= ACCURACY_THRESHOLD}')
                 if similarity_score >= ACCURACY_THRESHOLD:
+                    user = mysql_client.get_user_by_id(voiceprint)
                     wake_result = SUCCESS
                     response = qr.result(
                         wake_result,
                         recognized_text=asr_result,
-                        user_id=voiceprint,
+                        user_name=user.username,
                     )
                 else:
                     response = qr.result(
@@ -521,8 +520,7 @@ def wake():
         response = qr.error(e)
     finally:
         # 删除临时文件
-        # os.remove(file_path)
-        pass
+        os.remove(file_path)
 
     return jsonify(response)
 

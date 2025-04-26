@@ -60,26 +60,30 @@ def test_wake(audio_file_path, wake_text=TEST_WAKE_TEXT):
         print(f"声纹相似度: {similarity_score}")
 
         if similarity_score < ACCURACY_THRESHOLD:
-            return qr.error("声纹相似度不足")
+            print(f"声纹相似度不足")
 
         # 使用deep_speakerVector进行二次验证
-        deep_speaker_embedding = deep_speakerVector.get_embedding_from_file(pro_path).squeeze()
-        deep_speaker_score = deep_speakerVector.get_embeddings_score(similar_vector[np.newaxis, :], deep_speaker_embedding[np.newaxis, :])
+        deep_embedding = deep_speakerVector.get_embedding_from_file(pro_path).squeeze()
+        deep_results = milvus_client.search("deepSpeaker_vp512", deep_embedding, top_k=1)
+        similar_vector = np.array(search_results[0][0].entity.vec, dtype=np.float32)
+        deep_speaker_score = deep_speakerVector.get_embeddings_score(np.array(deep_results[0][0].entity.vec, dtype=np.float32)[np.newaxis, :], deep_embedding[np.newaxis, :])
         print(f"deep_speakerVector相似度: {deep_speaker_score}")
 
         if deep_speaker_score < ACCURACY_THRESHOLD:
-            return qr.error("deep_speakerVector声纹相似度不足")
+            print(f"deep_speakerVector声纹相似度不足")
 
+        if similarity_score < ACCURACY_THRESHOLD and deep_speaker_score < ACCURACY_THRESHOLD:
+            return qr.error("声纹相似度不足")
         # 获取用户信息
-        user_id = str(search_results[0][0].id)
-        user = mysql_client.get_user_by_id(user_id)
+        voiceprint_id = str(search_results[0][0].id)
+        user = mysql_client.get_user_by_id(voiceprint_id)
         if not user:
             return qr.error("未找到对应用户")
 
         # 构建成功响应
         return qr.data(
             wake_result="SUCCESS",
-            user_id=user_id,
+            user_id=user.id,
             username=user.username,
             permission_level=user.permission_level,
             similarity_score=similarity_score
