@@ -5,7 +5,7 @@ import numpy as np
 import config
 from dao import MySQLClient, MilvusClient
 from audio.asr import PaddleSpeechRecognition, SpeechRecognitionAdapter
-from audio.vector import PaddleSpeakerVerification, SpeakerVerificationAdapter
+from audio.vector import PaddleSpeakerVerification, SpeakerVerificationAdapter, DeepSpeakerVerification
 from utils.audioU import pre_process
 from utils.fileU import save_file
 from utils.responseU import QuickResponse as qr
@@ -22,6 +22,7 @@ mysql_client = MySQLClient(config.MySQL.host, config.MySQL.port, config.MySQL.us
 # 初始化模型
 paddleASR = SpeechRecognitionAdapter(PaddleSpeechRecognition())
 paddleVector = SpeakerVerificationAdapter(PaddleSpeakerVerification())
+deep_speakerVector = SpeakerVerificationAdapter(DeepSpeakerVerification())
 
 def test_wake(audio_file_path, wake_text=TEST_WAKE_TEXT):
     """
@@ -60,6 +61,14 @@ def test_wake(audio_file_path, wake_text=TEST_WAKE_TEXT):
 
         if similarity_score < ACCURACY_THRESHOLD:
             return qr.error("声纹相似度不足")
+
+        # 使用deep_speakerVector进行二次验证
+        deep_speaker_embedding = deep_speakerVector.get_embedding_from_file(pro_path).squeeze()
+        deep_speaker_score = deep_speakerVector.get_embeddings_score(similar_vector[np.newaxis, :], deep_speaker_embedding[np.newaxis, :])
+        print(f"deep_speakerVector相似度: {deep_speaker_score}")
+
+        if deep_speaker_score < ACCURACY_THRESHOLD:
+            return qr.error("deep_speakerVector声纹相似度不足")
 
         # 获取用户信息
         user_id = str(search_results[0][0].id)
