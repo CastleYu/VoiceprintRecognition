@@ -135,7 +135,7 @@ for speaker, audio_files in speaker_audio_map.items():
 
     # 处理音频文件
     pro_path = pre_process(temp_audio_path)
-    emb_192 = np.array(paddleVector.get_embedding_from_file(pro_path), dtype=np.float32)
+    emb_192 = np.array(paddleVector.get_embedding_from_file(pro_path), dtype=np.float32).reshape(1, -1)
     emb_512 = deep_speakerVector.get_embedding_from_file(pro_path)
 
     # 添加声纹向量
