@@ -84,44 +84,68 @@ def do_search_action(action):
 
 @app.route('/load', methods=['PUT'])
 def load():
+    """
+    处理用户上传的音频文件，进行声纹特征提取和注册
+
+    流程:
+    1. 验证上传文件有效性
+    2. 分段处理音频文件并计算总时长
+    3. 执行智能采样策略生成15秒的混合音频
+    4. 提取声纹特征(192维和512维两种)
+    5. 将特征向量存入Milvus向量数据库
+    6. 创建用户记录并返回注册结果
+
+    请求方法: PUT
+    请求参数:
+        - files: 音频文件(可多个)
+        - username: 用户名
+        - permission_level: 权限等级
+
+    返回:
+        - 成功: 包含用户ID、声纹ID等信息的JSON
+        - 失败: 错误信息的JSON
+    """
+    # 1. 检查请求中的文件有效性
     is_valid, message, files = check_file_in_request(request)
     if not is_valid:
         return jsonify(qr.error(message))
 
     try:
-        # 1. 分段处理音频文件
-        segments = []
-        total_duration = 0
+        # 2. 音频文件预处理阶段
+        segments = []  # 存储各音频片段信息
+        total_duration = 0  # 总时长统计
 
+        # 2.1 处理每个上传的音频文件
         for file in files:
-            # 保存临时文件
+            # 保存临时文件到上传目录
             file_path = save_file(file, UPLOAD_FOLDER)
 
-            # 读取音频并计算时长
+            # 使用librosa加载音频并计算时长
             y, sr = librosa.load(file_path, sr=None)
             duration = librosa.get_duration(y=y, sr=sr)
             total_duration += duration
 
             # 存储分段信息
             segments.append({
-                'path': file_path,
-                'data': y,
-                'sr': sr,
-                'duration': duration
+                'path': file_path,        # 文件路径
+                'data': y,                # 音频数据
+                'sr': sr,                 # 采样率
+                'duration': duration      # 时长(秒)
             })
 
-        # 2. 时长验证
+        # 2.2 验证总时长是否满足最低要求(10秒)
         if total_duration < 10:
             raise ValueError(f"总时长不足10秒(当前{total_duration:.2f}秒)")
 
         # 3. 智能采样策略
         target_samples = 15 * SAMPLE_RATE  # 15秒的目标采样数
-        sampled_audio = np.zeros(target_samples, dtype=np.float32)
-        current_pos = 0
+        sampled_audio = np.zeros(target_samples, dtype=np.float32)  # 初始化采样容器
+        current_pos = 0  # 当前填充位置
 
-        # 随机打乱片段顺序增加多样性
+        # 3.1 随机打乱片段顺序以增加样本多样性
         random.shuffle(segments)
 
+        # 3.2 从各片段中智能选取音频片段
         for seg in segments:
             seg_samples = len(seg['data'])
             remaining_space = target_samples - current_pos
@@ -129,49 +153,64 @@ def load():
             if remaining_space <= 0:
                 break
 
-            # 取片段的一部分(至少1秒)
+            # 计算本次要取的样本数(至少1秒，不超过剩余空间)
             take_samples = min(seg_samples, remaining_space,
                                max(int(seg['sr']), remaining_space // 2))
 
+            # 随机选择起始位置
             start = random.randint(0, max(0, seg_samples - take_samples))
+
+            # 填充采样数据
             sampled_audio[current_pos:current_pos + take_samples] = \
                 seg['data'][start:start + take_samples]
             current_pos += take_samples
 
-        # 4. 保存采样后的音频
+        # 4. 保存采样后的混合音频到临时文件
         temp_file = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
         sf.write(temp_file.name, sampled_audio[:current_pos], SAMPLE_RATE)
         temp_file.close()
 
-        # 5. 生成声纹特征
+        # 5. 声纹特征提取
+        # 5.1 预处理音频(降噪等)
         pro_path = pre_process(temp_file.name)
-        emb_192 = paddleVector.get_embedding_from_file(pro_path)
-        emb_512 = deep_speakerVector.get_embedding_from_file(pro_path).squeeze()
+        # 5.2 提取两种维度的声纹特征
+        emb_192 = paddleVector.get_embedding_from_file(pro_path)  # 192维特征
+        emb_512 = deep_speakerVector.get_embedding_from_file(pro_path).squeeze()  # 512维特征
 
-        # 6. 存储到数据库
+        # 6. 数据库操作
+        # 6.1 将特征存入Milvus向量数据库
         milvus_ids = milvus_client.insert(AUDIO_TABLE, [emb_192.tolist()])
         milvus_client.insert_with_ids("deepSpeaker_vp512", [milvus_ids[0]], [emb_512.tolist()])
 
+        # 6.2 创建用户记录
         username = request.form.get('username')
         permission_level = int(request.form.get('permission_level'))
-        new_user = User(username=username, voiceprint=milvus_ids[0], permission_level=permission_level)
+        new_user = User(
+            username=username,
+            voiceprint=milvus_ids[0],  # 使用192维特征的ID
+            permission_level=permission_level
+        )
         sql_client.user.add(new_user)
 
+        # 构造成功响应
         response = qr.data(
             user_id=new_user.id,
             voiceprint=milvus_ids[0],
             permission_level=permission_level,
-            actual_duration=current_pos / SAMPLE_RATE
+            actual_duration=current_pos / SAMPLE_RATE  # 实际采样的时长
         )
 
     except Exception as e:
+        # 异常处理
         response = qr.error(str(e))
         logger.error(f"注册失败: {str(e)}", exc_info=True)
     finally:
-        # 清理临时文件
+        # 7. 资源清理
+        # 7.1 删除分段音频临时文件
         for seg in segments:
             if os.path.exists(seg['path']):
                 os.remove(seg['path'])
+        # 7.2 删除混合音频临时文件
         if 'temp_file' in locals() and os.path.exists(temp_file.name):
             os.remove(temp_file.name)
 
@@ -252,12 +291,8 @@ def asr():
         return redirect(request.url)
 
     file_path = save_file(file, UPLOAD_FOLDER)
-    print(file_path)
-    file_path = r'P:\xiangmu\python\Voice\test11.wav'
     try:
         text = paddleASR.recognize(file_path)
-        print(text)
-        text = '打开报表'
         if text:
             response = qr.data(text=text)
         else:
@@ -281,8 +316,6 @@ def recognize():
 
     # 保存文件到指定路径
     file_path = save_file(files[0], UPLOAD_FOLDER)
-    print(file_path)
-    file_path = r'P:\xiangmu\python\Voice\opendoor.wav'
     try:
         pro_path = pre_process(file_path)
         # 获取音频嵌入向量
@@ -356,8 +389,6 @@ def recognizeAudioPrint():
 
     # 保存文件到指定路径
     file_path = save_file(files[0], UPLOAD_FOLDER)
-    print(file_path)
-    file_path = r'P:\xiangmu\python\Voice\opendoor.wav'
     try:
         # 计算音频时长和文本量
         y, sr = librosa.load(file_path, sr=None)
@@ -457,22 +488,17 @@ def recognizeAudioPrint():
 @app.route('/wake', methods=['POST'])
 def wake():
     file = request.files.get('file')
-    print(file)
     if not file:
         return jsonify({
             'error': 'Missing file'}), 400
     file_path = save_file(file, UPLOAD_FOLDER)
     wake_text = request.form.get('wake_text')  # 获取传入的验证文本
 
-    print(f"接收到的唤醒文本: {wake_text}")
-    print(f"接收到的文件路径: {file_path}")
-    print(file_path)
     try:
         pro_path = pre_process(file_path)
         wake_result = FAILED
         # 获取音频嵌入向量
         asr_result = paddleASR.recognize(file_path)
-        print(asr_result)
         if asr_result != wake_text:
             response = qr.result(
                 wake_result,
@@ -490,14 +516,12 @@ def wake():
                 voiceprint = str(search_results[0][0].id)
                 # 获取用户名字
                 user = sql_client.get_user_by_voiceprint(voiceprint)
-                print(user)
                 similar_vector = np.array(search_results[0][0].entity.vec, dtype=np.float32)
 
                 # 计算相似度评分
                 similarity_score = paddleVector.get_embeddings_score(similar_vector, audio_embedding)
 
                 # 根据相似度评分确定识别结果
-                print(f'{similarity_score} > {ACCURACY_THRESHOLD} = {similarity_score >= ACCURACY_THRESHOLD}')
                 if similarity_score >= ACCURACY_THRESHOLD:
                     user = mysql_client.get_user_by_voiceprint(voiceprint)
                     wake_result = SUCCESS
