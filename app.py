@@ -458,7 +458,7 @@ def recognizeAudioPrint():
         # 获取用户信息
         if recognize_result == SUCCESS:
             user = sql_client.get_user_by_voiceprint(VoicePrint_id)
-            user_name = user.username
+            user_name = user.user_name
             permission_level = user.permission_level
             response = qr.result(
                 recognize_result,
@@ -471,6 +471,7 @@ def recognizeAudioPrint():
         else:
             response = qr.result(
                 recognize_result,
+                similarity_score=similarity_score,
                 error='声纹识别失败',
                 model_used='both' if use_paddle and use_deep else ('paddle' if use_paddle else 'deep')
             )
