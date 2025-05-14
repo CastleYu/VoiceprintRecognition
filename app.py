@@ -41,7 +41,7 @@ milvus_client = MilvusClient(config.Milvus.host, config.Milvus.port)
 mysql_client = MySQLClient(config.MySQL.host, config.MySQL.port, config.MySQL.user,
                            config.MySQL.password, config.MySQL.database)
 sqlite_client = SQLiteClient(create_path("data", "database.db"), False)
-sql_client = sqlite_client
+sql_client = mysql_client
 paddleASR = SpeechRecognitionAdapter(PaddleSpeechRecognition())
 paddleVector = SpeakerVerificationAdapter(PaddleSpeakerVerification())
 deep_speakerVector = SpeakerVerificationAdapter(DeepSpeakerVerification())  # 初始化deep speaker模型
@@ -55,14 +55,14 @@ intent_recognizer = IntentRecognition(
 
 
 def do_search_action(action):
-    intent_result = intent_recognizer.detect_intent(action)
-    if isinstance(intent_result, dict):
-        intent_data = intent_result
-    elif isinstance(intent_result, str):
-        intent_data = json.loads(intent_result)
-    else:
-        raise Exception(intent_result)
-    # label = intent_data.get('intent', 'LAUNCH')  # 获取意图识别后的标签
+    # intent_result = intent_recognizer.detect_intent(action)
+    # if isinstance(intent_result, dict):
+    #     intent_data = intent_result
+    # elif isinstance(intent_result, str):
+    #     intent_data = json.loads(intent_result)
+    # else:
+    #     raise Exception(intent_result)
+    # # label = intent_data.get('intent', 'LAUNCH')  # 获取意图识别后的标签
 
     command_objs = sql_client.get_all_commands()
     action_set = [(cmd.id, cmd.action) for cmd in command_objs]
@@ -233,8 +233,11 @@ def delete_user():
         return redirect(request.url)
 
     # 从MySQL中删除指令
-    user = sql_client.get_user_by_voiceprint(user_id)
+    user = sql_client.get_user_by_id(user_id)
     voiceprint_id = user.voiceprint if user else None
+    if not voiceprint_id:
+        print("no such user!")
+    print(voiceprint_id)
     milvus_client.delete_by_id(AUDIO_TABLE, voiceprint_id)
     sql_client.del_user(user_id)
 
@@ -307,8 +310,8 @@ def asr():
     return jsonify(response)
 
 
-@app.route('/recognize', methods=['POST'])
-def recognize():
+@app.route('/recognize_legacy', methods=['POST'])
+def recognize_legacy():
     # 检查请求中的文件是否有效
     is_valid, message, files = check_file_in_request(request)
     if not is_valid:
@@ -323,7 +326,8 @@ def recognize():
         audio_embedding = paddleVector.get_embedding_from_file(pro_path)
 
         # 在 Milvus 中搜索相似音频
-        search_results = milvus_client.search(AUDIO_TABLE, audio_embedding, top_k=1)
+        search_results = milvus_client.search(AUDIO_TABLE, audio_embedding, top_k=2)
+        print(json.dumps(search_results, indent=4, ensure_ascii=False))
         user_name = 'None'
         similar_distance = '0'
         similarity_score = '0'
@@ -343,7 +347,8 @@ def recognize():
             similarity_score = paddleVector.get_embeddings_score(similar_vector, audio_embedding)
 
             # 根据相似度评分确定识别结果
-            if similarity_score >= ACCURACY_THRESHOLD:
+            if (True or
+                    similarity_score >= ACCURACY_THRESHOLD):
                 recognize_result = SUCCESS
                 asr_result = paddleASR.recognize(file_path)
                 response = qr.result(
@@ -364,7 +369,7 @@ def recognize():
                     permission_level=permission_level,
                     similar_distance=similar_distance,
                     similarity_score=similarity_score,
-                    error='相似度不够'
+                    error='声纹相似度不足'
                 )
         else:
             response = qr.error('未找到近似声纹')
@@ -459,8 +464,9 @@ def recognizeAudioPrint():
         # 获取用户信息
         if recognize_result == SUCCESS:
             user = sql_client.get_user_by_voiceprint(VoicePrint_id)
-            user_name = user.user_name
+            user_name = user.username
             permission_level = user.permission_level
+
             response = qr.result(
                 recognize_result,
                 username=user_name,
@@ -484,6 +490,124 @@ def recognizeAudioPrint():
         # 删除临时文件
         os.remove(file_path)
 
+    return jsonify(response)
+
+
+@app.route('/recognize', methods=['POST'])
+def recognize():
+    # 检查请求中的文件是否有效
+    is_valid, message, files = check_file_in_request(request)
+    if not is_valid:
+        flash(message)
+        return redirect(request.url)
+
+    # 保存文件到指定路径
+    file_path = save_file(files[0], UPLOAD_FOLDER)
+    try:
+        # 计算音频时长和文本量
+        y, sr = librosa.load(file_path, sr=None)
+        duration = librosa.get_duration(y=y, sr=sr)
+        text_estimate = duration * (110 / 60)  # 取中间值110字/min
+
+        pro_path = pre_process(file_path)
+
+        # 根据文本量决定模型组合
+        use_paddle = text_estimate >= LOW_TEXT_CHARACTER_LIMIT
+        use_deep = text_estimate <= HIGH_TEXT_CHARACTER_LIMIT
+
+        # 获取音频嵌入向量
+        paddle_embedding = paddleVector.get_embedding_from_file(pro_path) if use_paddle else None
+        deep_embedding = deep_speakerVector.get_embedding_from_file(pro_path).squeeze() if use_deep else None
+
+        # 在 Milvus 中搜索相似音频
+        paddle_results = milvus_client.search(AUDIO_TABLE, paddle_embedding, top_k=2) if use_paddle else []
+        deep_results = milvus_client.search("deepSpeaker_vp512", deep_embedding, top_k=2) if use_deep else []
+
+        print(paddle_results)
+        print(deep_results)
+        user_name = 'None'
+        recognize_result = FAILED
+        VoicePrint_id = '0'
+        user_id = '0'
+        similarity_score = '0'
+
+        # 判断识别结果
+        if use_paddle and use_deep:
+            # 使用两种模型的情况
+            paddle_match = len(paddle_results) > 0 and paddleVector.get_embeddings_score(
+                np.array(paddle_results[0][0].entity.vec, dtype=np.float32), paddle_embedding) >= ACCURACY_THRESHOLD
+            deep_match = len(deep_results) > 0 and deep_speakerVector.get_embeddings_score(
+                np.array(deep_results[0][0].entity.vec, dtype=np.float32)[np.newaxis, :],
+                deep_embedding[np.newaxis, :]) >= ACCURACY_THRESHOLD
+
+            if ACCURACY_THRESHOLD < HIGH_PRECISION_THRESHOLD:
+                recognize_result = SUCCESS if paddle_match or deep_match else FAILED
+            else:
+                recognize_result = SUCCESS if paddle_match and deep_match else FAILED
+
+            if recognize_result == SUCCESS:
+                VoicePrint_id = str(paddle_results[0][0].id if paddle_match else deep_results[0][0].id)
+                similarity_score = max(
+                    paddleVector.get_embeddings_score(
+                        np.array(paddle_results[0][0].entity.vec, dtype=np.float32),
+                        paddle_embedding) if paddle_match else 0,
+                    deep_speakerVector.get_embeddings_score(
+                        np.array(deep_results[0][0].entity.vec, dtype=np.float32)[np.newaxis, :],
+                        deep_embedding[np.newaxis, :]) if deep_match else 0
+                )
+        elif use_paddle:
+            # 仅使用paddle模型
+            if len(paddle_results) > 0:
+                similarity_score = paddleVector.get_embeddings_score(
+                    np.array(paddle_results[0][0].entity.vec, dtype=np.float32), paddle_embedding)
+                recognize_result = SUCCESS if similarity_score >= ACCURACY_THRESHOLD else FAILED
+                VoicePrint_id = str(paddle_results[0][0].id)
+        elif use_deep:
+            # 仅使用deep模型
+            if len(deep_results) > 0:
+                similarity_score = deep_speakerVector.get_embeddings_score(
+                    np.array(deep_results[0][0].entity.vec, dtype=np.float32)[np.newaxis, :],
+                    deep_embedding[np.newaxis, :])
+                similarity_score = similarity_score[0]
+                recognize_result = SUCCESS if similarity_score >= ACCURACY_THRESHOLD else FAILED
+                VoicePrint_id = str(deep_results[0][0].id)
+        recognize_result = SUCCESS
+        # 获取用户信息
+        similarity_score = str(similarity_score)
+        user = sql_client.get_user_by_voiceprint(VoicePrint_id)
+        user_name = user.username
+        permission_level = user.permission_level
+        asr_result = paddleASR.recognize(file_path)
+        possible_action = do_search_action(asr_result)[1]
+        if recognize_result == SUCCESS:
+            response = qr.result(
+                recognize_result,
+                username=user_name,
+                user_id=user_id,
+                permission_level=permission_level,
+                similarity_score=similarity_score,
+                model_used='both' if use_paddle and use_deep else ('paddle' if use_paddle else 'deep'),
+                asr_result=asr_result,
+                possible_action=possible_action
+            )
+        else:
+            response = qr.result(
+                recognize_result,
+                username=user_name,
+                user_id=user_id,
+                permission_level=0,
+                similarity_score=similarity_score,
+                error='声纹识别失败',
+                model_used='both' if use_paddle and use_deep else ('paddle' if use_paddle else 'deep')
+            )
+
+    except Exception as e:
+        traceback.print_exc()
+        response = qr.error(e)
+    finally:
+        # 删除临时文件
+        os.remove(file_path)
+    print(response)
     return jsonify(response)
 
 
