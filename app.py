@@ -1,5 +1,7 @@
 import traceback
 import tempfile
+from typing import Optional
+
 import librosa
 import soundfile as sf
 import numpy as np
@@ -39,7 +41,7 @@ milvus_client = MilvusClient(config.Milvus.host, config.Milvus.port)
 mysql_client = MySQLClient(config.MySQL.host, config.MySQL.port, config.MySQL.user,
                            config.MySQL.password, config.MySQL.database)
 sqlite_client = SQLiteClient(create_path("data", "database.db"), False)
-sql_client = mysql_client
+sql_client = sqlite_client
 paddleASR = SpeechRecognitionAdapter(PaddleSpeechRecognition())
 paddleVector = SpeakerVerificationAdapter(PaddleSpeakerVerification())
 deep_speakerVector = SpeakerVerificationAdapter(DeepSpeakerVerification())  # 初始化deep speaker模型
@@ -60,11 +62,10 @@ def do_search_action(action):
         intent_data = json.loads(intent_result)
     else:
         raise Exception(intent_result)
-    label = intent_data.get('intent', 'LAUNCH')  # 获取意图识别后的标签
+    # label = intent_data.get('intent', 'LAUNCH')  # 获取意图识别后的标签
 
-    command_objs = sql_client.get_command_by_label(label)
+    command_objs = sql_client.get_all_commands()
     action_set = [(cmd.id, cmd.action) for cmd in command_objs]
-
     if action_set:
         # 提取 action 字段以便进行匹配
         actions = [action[1] for action in action_set]
@@ -127,10 +128,10 @@ def load():
 
             # 存储分段信息
             segments.append({
-                'path': file_path,        # 文件路径
-                'data': y,                # 音频数据
-                'sr': sr,                 # 采样率
-                'duration': duration      # 时长(秒)
+                'path': file_path,  # 文件路径
+                'data': y,  # 音频数据
+                'sr': sr,  # 采样率
+                'duration': duration  # 时长(秒)
             })
 
         # 2.2 验证总时长是否满足最低要求(10秒)
@@ -494,7 +495,7 @@ def wake():
             'error': 'Missing file'}), 400
     file_path = save_file(file, UPLOAD_FOLDER)
     wake_text = request.form.get('wake_text')  # 获取传入的验证文本
-
+    logging.debug(wake_text)
     try:
         pro_path = pre_process(file_path)
         wake_result = FAILED
@@ -552,22 +553,96 @@ def wake():
 
 @app.route('/add_action', methods=['POST'])
 def add_action():
-    # 检查请求中是否包含指令部分
-    if 'action' not in request.form:
-        flash('No action part')
-        return redirect(request.url)
+    """新增指令（含 action / level / label / slot）"""
+    # ─── 1. 参数提取 ───
+    action = request.form.get('action', '').strip()
+    level = request.form.get('level', 1)
+    label = request.form.get('label', 'LAUNCH').strip() or 'LAUNCH'
+    slot = request.form.get('slot', '').strip()
 
-    action = request.form['action']
+    # ─── 2. 基本校验 ───
+    if not action:
+        return jsonify(qr.result(FAILED, error='action 不能为空')), 400
+    try:
+        level = int(level)
+    except ValueError:
+        return jsonify(qr.result(FAILED, error='level 必须为整数')), 400
 
-    # 检查指令是否为空
-    if action == '':
-        flash('No action provided')
-        return redirect(request.url)
+    new_cmd = Command(action=action, level=level, label=label, slot=slot)
+    sql_client.command.add(new_cmd)
+    try:
+        sql_client.command.commit()
+    except:
+        sql_client.command.session.rollback()
+        return jsonify(qr.result(FAILED, error='添加异常')), 409
 
-    # 将指令插入到MySQL
-    sql_client.add_command(action)
+    return jsonify(qr.success()), 201
 
-    return jsonify(qr.success())
+
+# ---------- /add_action 新实现结束 ----------
+
+
+# ---------- /update_action 实现开始 ----------
+@app.route('/update_action', methods=['POST'])
+def update_action():
+    """
+    更新指令
+    必填字段：id
+    可选字段：action、level、label、slot
+    · 若 action 重复，返回 409
+    · 若找不到对应 id，返回 404
+    · 成功返回更新后的完整记录
+    """
+    # ─── 1. 提取参数 ───
+    cmd_id = request.form.get('id')
+    if not cmd_id:
+        return jsonify(qr.result(FAILED, error='id 不能为空')), 400
+    try:
+        cmd_id = int(cmd_id)
+    except ValueError:
+        return jsonify(qr.result(FAILED, error='id 必须为整数')), 400
+
+    action = request.form.get('action')
+    level = request.form.get('level')
+    label = request.form.get('label')
+    slot = request.form.get('slot')
+
+    # ─── 2. 查询现有记录 ───
+    cmd: Optional[Command] = sql_client.command.get_one(cmd_id)
+    if cmd is None:
+        return jsonify(qr.result(FAILED, error=f'未找到 id={cmd_id} 的指令')), 404
+
+    # ─── 3. 字段更新（仅修改用户传入的字段）───
+    if action is not None:
+        action = action.strip()
+        if not action:
+            return jsonify(qr.result(FAILED, error='action 不能为空')), 400
+        cmd.action = action
+
+    if level is not None:
+        try:
+            cmd.level = int(level)
+        except ValueError:
+            return jsonify(qr.result(FAILED, error='level 必须为整数')), 400
+
+    if label is not None:
+        cmd.label = label.strip() or 'LAUNCH'
+
+    if slot is not None:
+        cmd.slot = slot.strip()
+
+    # ─── 4. 提交事务 ───
+    try:
+        sql_client.command.commit()
+    except:  # 主要用于处理 action 唯一索引冲突
+        sql_client.command.session.rollback()
+        return jsonify(qr.result(FAILED, error='action 已存在，更新失败')), 409
+
+    # ─── 5. 返回成功结果 ───
+    return jsonify(qr.success()), 200
+
+
+# ---------- /update_action 实现结束 ----------
 
 
 @app.route('/delete_action', methods=['POST'])
@@ -609,17 +684,29 @@ def search_action():
         best_match_action=best_match,
         similarity_percent=f'{similarity_score * 100:.1f}'
     )
+
     return jsonify(response)
 
 
 @app.route('/get_all_action', methods=['GET'])
 def get_all_action():
     milvus_client.query_all(AUDIO_TABLE)
-    action_set = [cmd.action for cmd in sql_client.get_all_commands()]
-
+    action_set = [{
+        "id": cmd.id,
+        "action": cmd.action,
+        "level": cmd.level,
+        "label": cmd.label,
+        "slot": cmd.slot}
+        for cmd in sql_client.get_all_commands()
+    ]
     response = qr.data(action_set=action_set)
     return jsonify(response)
 
 
 if __name__ == '__main__':
     app.run()
+
+    # string = input("输入文本捏：")
+    # while string:
+    #     print(do_search_action(string))
+    #     string = input("输入：")
