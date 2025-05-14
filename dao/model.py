@@ -20,8 +20,14 @@ class Command(Base):
     __tablename__ = 'command'
     id = Column(Integer, primary_key=True)
     action = Column(String(255), unique=True)
+    level = Column(Integer)
     label = Column(String(255), default='LAUNCH', nullable=False)
     slot = Column(String(255))
+
+    def __repr__(self):
+        return (f"<Command(id={self.id}, action='{self.action}',"
+                f" level={self.level},"
+                f" label='{self.label}', slot='{self.slot}')>")
 
 
 class VoicePrint(Schema):
